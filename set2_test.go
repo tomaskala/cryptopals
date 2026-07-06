@@ -85,10 +85,7 @@ func TestChallenge10(t *testing.T) {
 
 func TestChallenge11(t *testing.T) {
 	oracle := newECBCBCOracle()
-	input := make([]byte, 16*3)
-	for i := range input {
-		input[i] = 'A'
-	}
+	input := bytes.Repeat([]byte{'A'}, 3*16)
 
 	var countECB int
 	var countCBC int
@@ -104,4 +101,15 @@ func TestChallenge11(t *testing.T) {
 	}
 
 	t.Logf("ECB count: %d, CBC count: %d", countECB, countCBC)
+}
+
+func TestChallenge12(t *testing.T) {
+	suffix := base64Decode(t, `Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
+aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
+dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
+YnkK
+`)
+	oracle := newECBSuffixOracle(suffix)
+	target := breakECBSuffixOracle(oracle)
+	t.Logf("target string: %s", target)
 }
