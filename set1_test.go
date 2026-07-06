@@ -107,6 +107,16 @@ func TestChallenge07(t *testing.T) {
 
 	plaintext := decryptECB(ciphertext, block)
 	t.Logf("plaintext: %s", plaintext)
+
+	reencrypted := encryptECB(plaintext, block)
+	if !bytes.Equal(ciphertext, reencrypted) {
+		t.Errorf("expected: %v, got: %v", ciphertext, reencrypted)
+	}
+
+	redecrypted := decryptECB(reencrypted, block)
+	if !bytes.Equal(plaintext, redecrypted) {
+		t.Errorf("expected: %v, got: %v", plaintext, redecrypted)
+	}
 }
 
 func TestChallenge08(t *testing.T) {

@@ -117,6 +117,17 @@ func findRepeatingKey(bs []byte, keySize int, freq []float64) []byte {
 	return key
 }
 
+func encryptECB(bs []byte, block cipher.Block) []byte {
+	if len(bs)%block.BlockSize() != 0 {
+		panic("length of plaintext not a multiple of block size")
+	}
+	res := make([]byte, len(bs))
+	for i := 0; i < len(bs); i += block.BlockSize() {
+		block.Encrypt(res[i:], bs[i:])
+	}
+	return res
+}
+
 func decryptECB(bs []byte, block cipher.Block) []byte {
 	if len(bs)%block.BlockSize() != 0 {
 		panic("length of ciphertext not a multiple of block size")
