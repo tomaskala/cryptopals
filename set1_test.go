@@ -125,7 +125,7 @@ func TestChallenge08(t *testing.T) {
 	i := 0
 	for line := range strings.Lines(string(ciphertexts)) {
 		bs := []byte(hexDecode(t, strings.TrimSpace(line)))
-		if detectECB(bs, 16) {
+		if detectECB(bs, aesBlockSize) {
 			t.Logf("detected ECB on line %d: %v", i+1, bs)
 		}
 		i++

@@ -61,7 +61,7 @@ func TestChallenge09(t *testing.T) {
 
 func TestChallenge10(t *testing.T) {
 	ciphertext := base64Decode(t, string(readFile(t, "resources/challenge10.txt")))
-	iv := make([]byte, 16)
+	iv := make([]byte, aesBlockSize)
 	key := []byte("YELLOW SUBMARINE")
 
 	block, err := aes.NewCipher(key)
@@ -85,14 +85,14 @@ func TestChallenge10(t *testing.T) {
 
 func TestChallenge11(t *testing.T) {
 	oracle := newECBCBCOracle()
-	input := bytes.Repeat([]byte{'A'}, 3*16)
+	input := bytes.Repeat([]byte{'A'}, 3*aesBlockSize)
 
 	var countECB int
 	var countCBC int
 
 	for range 10000 {
 		ciphertext := oracle(input)
-		block1, block2 := ciphertext[16:16*2], ciphertext[16*2:16*3]
+		block1, block2 := ciphertext[aesBlockSize:aesBlockSize*2], ciphertext[aesBlockSize*2:aesBlockSize*3]
 		if bytes.Equal(block1, block2) {
 			countECB++
 		} else {
@@ -111,5 +111,16 @@ YnkK
 `)
 	oracle := newECBSuffixOracle(suffix)
 	target := breakECBSuffixOracle(oracle)
+	t.Logf("target string: %s", target)
+}
+
+func TestChallenge14(t *testing.T) {
+	suffix := base64Decode(t, `Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
+aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
+dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
+YnkK
+`)
+	oracle := newECBPrefixSuffixOracle(suffix)
+	target := breakECBPrefixSuffixOracle(oracle)
 	t.Logf("target string: %s", target)
 }

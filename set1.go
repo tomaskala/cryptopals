@@ -8,6 +8,8 @@ import (
 	"math/bits"
 )
 
+const aesBlockSize = 16
+
 func hexToBase64(s string) string {
 	decoded, err := hex.DecodeString(s)
 	if err != nil {

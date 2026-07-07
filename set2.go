@@ -70,7 +70,7 @@ func decryptCBC(bs, iv []byte, block cipher.Block) []byte {
 }
 
 func newECBCBCOracle() func([]byte) []byte {
-	key := make([]byte, 16)
+	key := make([]byte, aesBlockSize)
 	rand.Read(key)
 
 	block, err := aes.NewCipher(key)
@@ -85,20 +85,20 @@ func newECBCBCOracle() func([]byte) []byte {
 		suffix := make([]byte, 5+mathrand.IntN(6))
 		rand.Read(suffix)
 
-		buf := padPKCS7(append(append(prefix, bs...), suffix...), 16)
+		buf := padPKCS7(append(append(prefix, bs...), suffix...), aesBlockSize)
 
 		if mathrand.Float64() <= 0.5 {
 			return encryptECB(buf, block)
 		}
 
-		iv := make([]byte, 16)
+		iv := make([]byte, aesBlockSize)
 		rand.Read(iv)
 		return encryptCBC(buf, iv, block)
 	}
 }
 
 func newECBSuffixOracle(suffix []byte) func([]byte) []byte {
-	key := make([]byte, 16)
+	key := make([]byte, aesBlockSize)
 	rand.Read(key)
 
 	block, err := aes.NewCipher(key)
@@ -107,7 +107,7 @@ func newECBSuffixOracle(suffix []byte) func([]byte) []byte {
 	}
 
 	return func(bs []byte) []byte {
-		buf := padPKCS7(append(bs, suffix...), 16)
+		buf := padPKCS7(append(bs, suffix...), aesBlockSize)
 		return encryptECB(buf, block)
 	}
 }
@@ -160,4 +160,60 @@ func breakECBSuffixOracle(oracle func([]byte) []byte) []byte {
 
 func modulo(a, b int) int {
 	return (a%b + b) % b
+}
+
+func newECBPrefixSuffixOracle(suffix []byte) func([]byte) []byte {
+	key := make([]byte, aesBlockSize)
+	rand.Read(key)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	prefixLen := mathrand.IntN(500)
+	prefix := make([]byte, prefixLen)
+	rand.Read(prefix)
+
+	return func(bs []byte) []byte {
+		buf := padPKCS7(append(prefix, append(bs, suffix...)...), aesBlockSize)
+		return encryptECB(buf, block)
+	}
+}
+
+func breakECBPrefixSuffixOracle(oracle func([]byte) []byte) []byte {
+	var prefixLen int
+	found := false
+
+	findRepetitionStart := func(bs []byte) int {
+		for i := 0; i < len(bs)-2*aesBlockSize; i += aesBlockSize {
+			if bytes.Equal(bs[i:i+aesBlockSize], bs[i+aesBlockSize:i+2*aesBlockSize]) {
+				return i
+			}
+		}
+		return -1
+	}
+
+	for p := range aesBlockSize {
+		padding := bytes.Repeat([]byte{'P'}, p)
+		repetition := bytes.Repeat([]byte{'A'}, 2*aesBlockSize)
+		query := append(padding, append(repetition, 'S')...)
+
+		ciphertext := oracle(query)
+		if start := findRepetitionStart(ciphertext); start >= 0 {
+			prefixLen = start - p
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		panic("prefix length not found")
+	}
+
+	return breakECBSuffixOracle(func(bs []byte) []byte {
+		paddingLen := aesBlockSize - prefixLen%aesBlockSize
+		attack := append(bytes.Repeat([]byte{'P'}, paddingLen), bs...)
+		return oracle(attack)[prefixLen+paddingLen:]
+	})
 }
