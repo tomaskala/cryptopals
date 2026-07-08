@@ -114,6 +114,41 @@ YnkK
 	t.Logf("target string: %s", target)
 }
 
+func TestChallenge13(t *testing.T) {
+	generateCookie, isAdmin := newECBCutAndPasteOracle()
+
+	if isAdmin(generateCookie("")) {
+		t.Fatalf("already admin")
+	}
+
+	// For the ordering email/uid/role.
+	query1 := generateCookie("AAAAAAAAAAadmin")
+	block11 := query1[:aesBlockSize]                   // email=AAAAAAAAAA
+	block12 := query1[aesBlockSize : 2*aesBlockSize]   // admin&uid=10&rol
+	block13 := query1[2*aesBlockSize : 3*aesBlockSize] // e=userPPPPPPPPPP
+
+	query2 := generateCookie("AAAAAAAAAAAAA")
+	block22 := query2[aesBlockSize : 2*aesBlockSize] // AAA&uid=10&role=
+
+	// email=AAAAAAAAAA AAA&uid=10&role= admin&uid=10&rol e=userPPPPPPPPPP
+	adminCookie1 := block11 + block22 + block12 + block13
+
+	// For the ordering email/role/uid.
+	query3 := generateCookie("AAAAAAAAAAadmin")
+	query32 := query3[aesBlockSize : 2*aesBlockSize]   // admin&uid=10&rol
+	query33 := query3[2*aesBlockSize : 3*aesBlockSize] // e=userPPPPPPPPPP
+
+	query4 := generateCookie("AAAA")
+	query41 := query4[:aesBlockSize] // email=AAAA&role=
+
+	// email=AAAA&role= admin&uid=10&rol e=userPPPPPPPPPP
+	adminCookie2 := query41 + query32 + query33
+
+	if !isAdmin(adminCookie1) && !isAdmin(adminCookie2) {
+		t.Errorf("not an admin")
+	}
+}
+
 func TestChallenge14(t *testing.T) {
 	suffix := base64Decode(t, `Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
 aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq

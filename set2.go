@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	mathrand "math/rand/v2"
+	"net/url"
 )
 
 func padPKCS7(bs []byte, blockSize byte) []byte {
@@ -160,6 +161,42 @@ func breakECBSuffixOracle(oracle func([]byte) []byte) []byte {
 
 func modulo(a, b int) int {
 	return (a%b + b) % b
+}
+
+func profileFor(email string) string {
+	v := url.Values{}
+	v.Set("email", email)
+	v.Set("uid", "10")
+	v.Set("role", "user")
+	return v.Encode()
+}
+
+func newECBCutAndPasteOracle() (
+	generateCookie func(string) string,
+	isAdmin func(string) bool,
+) {
+	key := make([]byte, aesBlockSize)
+	rand.Read(key)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	generateCookie = func(email string) string {
+		profile := profileFor(email)
+		buf := padPKCS7([]byte(profile), aesBlockSize)
+		return string(encryptECB(buf, block))
+	}
+	isAdmin = func(cookie string) bool {
+		buf := decryptECB([]byte(cookie), block)
+		v, err := url.ParseQuery(string(unpadPKCS7(buf)))
+		if err != nil {
+			panic(err)
+		}
+		return v.Get("role") == "admin"
+	}
+	return
 }
 
 func newECBPrefixSuffixOracle(suffix []byte) func([]byte) []byte {
