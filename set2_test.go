@@ -159,3 +159,18 @@ YnkK
 	target := breakECBPrefixSuffixOracle(oracle)
 	t.Logf("target string: %s", target)
 }
+
+func TestChallenge15(t *testing.T) {
+	expected := "ICE ICE BABY"
+	if unpadded := unpadPKCS7([]byte("ICE ICE BABY\x04\x04\x04\x04")); string(unpadded) != "ICE ICE BABY" {
+		t.Errorf("expected %s, got %s", expected, unpadded)
+	}
+
+	if unpadded := unpadPKCS7([]byte("ICE ICE BABY\x05\x05\x05\x05")); unpadded != nil {
+		t.Errorf("expected nil, got %s", unpadded)
+	}
+
+	if unpadded := unpadPKCS7([]byte("ICE ICE BABY\x01\x02\x03\x04")); unpadded != nil {
+		t.Errorf("expected nil, got %s", unpadded)
+	}
+}
