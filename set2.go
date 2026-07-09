@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	mathrand "math/rand/v2"
 	"net/url"
+	"strings"
 )
 
 func padPKCS7(bs []byte, blockSize byte) []byte {
@@ -253,4 +254,38 @@ func breakECBPrefixSuffixOracle(oracle func([]byte) []byte) []byte {
 		attack := append(bytes.Repeat([]byte{'P'}, paddingLen), bs...)
 		return oracle(attack)[prefixLen+paddingLen:]
 	})
+}
+
+func newCBCCookieOracle() (
+	generateCookie func(string) string,
+	isAdmin func(string) bool,
+) {
+	key := make([]byte, aesBlockSize)
+	rand.Read(key)
+
+	iv := make([]byte, aesBlockSize)
+	rand.Read(iv)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	prefix := "comment1=cooking%20MCs;userdata="
+	suffix := ";comment2=%20like%20a%20pound%20of%20bacon"
+
+	generateCookie = func(input string) string {
+		sanitized := strings.ReplaceAll(input, ";", "")
+		sanitized = strings.ReplaceAll(input, "=", "")
+		cookie := prefix + sanitized + suffix
+
+		buf := padPKCS7([]byte(cookie), aesBlockSize)
+		return string(encryptCBC(buf, iv, block))
+	}
+	isAdmin = func(s string) bool {
+		buf := decryptCBC([]byte(s), iv, block)
+		cookie := string(unpadPKCS7(buf))
+		return strings.Contains(cookie, ";admin=true;")
+	}
+	return
 }

@@ -174,3 +174,22 @@ func TestChallenge15(t *testing.T) {
 		t.Errorf("expected nil, got %s", unpadded)
 	}
 }
+
+func TestChallenge16(t *testing.T) {
+	generateCookie, isAdmin := newCBCCookieOracle()
+
+	if isAdmin(generateCookie("")) {
+		t.Fatalf("already admin")
+	}
+
+	query := "AadminAtrueAAAAA"
+	cookie := generateCookie(query)
+	attack := []byte(cookie)
+	attack[aesBlockSize+0] ^= query[0] ^ ';'
+	attack[aesBlockSize+6] ^= query[6] ^ '='
+	attack[aesBlockSize+11] ^= query[11] ^ ';'
+
+	if !isAdmin(string(attack)) {
+		t.Errorf("not an admin")
+	}
+}
