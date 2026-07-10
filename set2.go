@@ -276,7 +276,7 @@ func newCBCCookieOracle() (
 
 	generateCookie = func(input string) string {
 		sanitized := strings.ReplaceAll(input, ";", "")
-		sanitized = strings.ReplaceAll(input, "=", "")
+		sanitized = strings.ReplaceAll(sanitized, "=", "")
 		cookie := prefix + sanitized + suffix
 
 		buf := padPKCS7([]byte(cookie), aesBlockSize)
