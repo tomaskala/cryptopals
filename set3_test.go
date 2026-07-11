@@ -2,6 +2,7 @@ package cryptopals
 
 import (
 	"bytes"
+	"crypto/aes"
 	"testing"
 )
 
@@ -29,5 +30,29 @@ func TestChallenge17(t *testing.T) {
 		if !bytes.Equal(decrypted, input) {
 			t.Errorf("expected %s, got %s", input, decrypted)
 		}
+	}
+}
+
+func TestChallenge18(t *testing.T) {
+	ciphertext := base64Decode(t, "L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==")
+	nonce := make([]byte, aesBlockSize/2)
+	key := []byte("YELLOW SUBMARINE")
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plaintext := decryptCTR(nonce, ciphertext, block)
+	t.Logf("plaintext: %s", plaintext)
+
+	reencrypted := encryptCTR(nonce, plaintext, block)
+	if !bytes.Equal(ciphertext, reencrypted) {
+		t.Errorf("expected: %v, got: %v", ciphertext, reencrypted)
+	}
+
+	redecrypted := decryptCTR(nonce, reencrypted, block)
+	if !bytes.Equal(plaintext, redecrypted) {
+		t.Errorf("expected: %v, got: %v", plaintext, redecrypted)
 	}
 }

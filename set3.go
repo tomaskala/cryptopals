@@ -2,7 +2,9 @@ package cryptopals
 
 import (
 	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
+	"encoding/binary"
 )
 
 func newCBCPaddingOracle(plaintext []byte) (
@@ -73,3 +75,21 @@ func breakCBCPaddingOracle(ciphertext []byte, isPaddingValid func([]byte) bool) 
 	}
 	return decrypted
 }
+
+func encryptCTR(nonce, bs []byte, block cipher.Block) []byte {
+	keyStream := make([]byte, block.BlockSize())
+	secret := make([]byte, block.BlockSize())
+	copy(secret, nonce)
+
+	var res []byte
+	for i := 0; i < len(bs); i += block.BlockSize() {
+		binary.LittleEndian.PutUint64(secret[len(nonce):], uint64(i/block.BlockSize()))
+		block.Encrypt(keyStream, secret)
+
+		blockLength := min(len(keyStream), len(bs[i:]))
+		res = append(res, fixedXor(keyStream[:blockLength], bs[i:i+blockLength])...)
+	}
+	return res
+}
+
+var decryptCTR = encryptCTR
