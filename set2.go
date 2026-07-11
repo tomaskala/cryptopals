@@ -36,7 +36,7 @@ func unpadPKCS7(bs []byte) []byte {
 	return bs[:len(bs)-padding]
 }
 
-func encryptCBC(bs, iv []byte, block cipher.Block) []byte {
+func encryptCBC(iv, bs []byte, block cipher.Block) []byte {
 	if len(bs)%block.BlockSize() != 0 {
 		panic("length of plaintext not a multiple of block size")
 	}
@@ -53,7 +53,7 @@ func encryptCBC(bs, iv []byte, block cipher.Block) []byte {
 	return res
 }
 
-func decryptCBC(bs, iv []byte, block cipher.Block) []byte {
+func decryptCBC(iv, bs []byte, block cipher.Block) []byte {
 	if len(bs)%block.BlockSize() != 0 {
 		panic("length of ciphertext not a multiple of block size")
 	}
@@ -95,7 +95,7 @@ func newECBCBCOracle() func([]byte) []byte {
 
 		iv := make([]byte, aesBlockSize)
 		rand.Read(iv)
-		return encryptCBC(buf, iv, block)
+		return encryptCBC(iv, buf, block)
 	}
 }
 
@@ -280,10 +280,10 @@ func newCBCCookieOracle() (
 		cookie := prefix + sanitized + suffix
 
 		buf := padPKCS7([]byte(cookie), aesBlockSize)
-		return string(encryptCBC(buf, iv, block))
+		return string(encryptCBC(iv, buf, block))
 	}
 	isAdmin = func(s string) bool {
-		buf := decryptCBC([]byte(s), iv, block)
+		buf := decryptCBC(iv, []byte(s), block)
 		cookie := string(unpadPKCS7(buf))
 		return strings.Contains(cookie, ";admin=true;")
 	}

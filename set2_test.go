@@ -69,15 +69,15 @@ func TestChallenge10(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plaintext := decryptCBC(ciphertext, iv, block)
+	plaintext := decryptCBC(iv, ciphertext, block)
 	t.Logf("plaintext: %s", plaintext)
 
-	reencrypted := encryptCBC(plaintext, iv, block)
+	reencrypted := encryptCBC(iv, plaintext, block)
 	if !bytes.Equal(ciphertext, reencrypted) {
 		t.Errorf("expected: %v, got: %v", ciphertext, reencrypted)
 	}
 
-	redecrypted := decryptCBC(reencrypted, iv, block)
+	redecrypted := decryptCBC(iv, reencrypted, block)
 	if !bytes.Equal(plaintext, redecrypted) {
 		t.Errorf("expected: %v, got: %v", plaintext, redecrypted)
 	}

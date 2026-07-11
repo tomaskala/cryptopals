@@ -21,12 +21,12 @@ func newCBCPaddingOracle(plaintext []byte) (
 		iv := make([]byte, aesBlockSize)
 		rand.Read(iv)
 
-		ciphertext := encryptCBC(padPKCS7(plaintext, aesBlockSize), iv, block)
+		ciphertext := encryptCBC(iv, padPKCS7(plaintext, aesBlockSize), block)
 		return append(iv, ciphertext...)
 	}
 	isPaddingValid = func(input []byte) bool {
 		iv, ciphertext := input[:aesBlockSize], input[aesBlockSize:]
-		decrypted := decryptCBC(ciphertext, iv, block)
+		decrypted := decryptCBC(iv, ciphertext, block)
 		return unpadPKCS7(decrypted) != nil
 	}
 	return
