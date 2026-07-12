@@ -127,3 +127,58 @@ func breakCTRReusedNonce(ciphertexts [][]byte, freq []float64) []byte {
 	}
 	return keyStream
 }
+
+const (
+	mtN         = 624
+	mtM         = 397
+	mtMatrixA   = 0x9908b0df
+	mtUpperMask = 0x80000000
+	mtLowerMask = 0x7fffffff
+)
+
+var mtMag01 = [...]uint32{0x00, mtMatrixA}
+
+// Source: https://www.math.sci.hiroshima-u.ac.jp/m-mat/MT/emt.html
+type mt19937 struct {
+	state [mtN]uint32
+	index int
+}
+
+func newMT19937(seed uint32) *mt19937 {
+	var mt mt19937
+	mt.state[0] = seed
+	for mt.index = 1; mt.index < mtN; mt.index++ {
+		mt.state[mt.index] = 1812433253*(mt.state[mt.index-1]^(mt.state[mt.index-1]>>30)) + uint32(mt.index)
+	}
+	return &mt
+}
+
+func (mt *mt19937) generate() uint32 {
+	if mt.index >= mtN {
+		// Twisting
+		var kk int
+		var y uint32
+		for kk = 0; kk < mtN-mtM; kk++ {
+			y = (mt.state[kk] & mtUpperMask) | (mt.state[kk+1] & mtLowerMask)
+			mt.state[kk] = mt.state[kk+mtM] ^ (y >> 1) ^ mtMag01[y&0x01]
+		}
+		for ; kk < mtN-1; kk++ {
+			y = (mt.state[kk] & mtUpperMask) | (mt.state[kk+1] & mtLowerMask)
+			mt.state[kk] = mt.state[kk+(mtM-mtN)] ^ (y >> 1) ^ mtMag01[y&0x01]
+		}
+		y = (mt.state[mtN-1] & mtUpperMask) | (mt.state[0] & mtLowerMask)
+		mt.state[mtN-1] = mt.state[mtM-1] ^ (y >> 1) ^ mtMag01[y&0x01]
+		mt.index = 0
+	}
+
+	y := mt.state[mt.index]
+	mt.index++
+
+	// Tempering
+	y ^= (y >> 11)
+	y ^= (y << 7) & 0x9d2c5680
+	y ^= (y << 15) & 0xefc60000
+	y ^= (y >> 18)
+
+	return y
+}
