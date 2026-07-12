@@ -93,3 +93,37 @@ func encryptCTR(nonce, bs []byte, block cipher.Block) []byte {
 }
 
 var decryptCTR = encryptCTR
+
+func breakCTRReusedNonce(ciphertexts [][]byte, freq []float64) []byte {
+	uppercaseFreq := make([]float64, len(freq))
+	for c := 'A'; c <= 'Z'; c++ {
+		uppercaseFreq[c] = freq[c]
+	}
+
+	column := make([]byte, len(ciphertexts))
+	maxLength := 0
+	for _, ciphertext := range ciphertexts {
+		maxLength = max(maxLength, len(ciphertext))
+	}
+
+	var keyStream []byte
+	for i := range maxLength {
+		columnLength := 0
+		for _, ciphertext := range ciphertexts {
+			if i >= len(ciphertext) {
+				continue
+			}
+			column[columnLength] = ciphertext[i]
+			columnLength++
+		}
+
+		var k byte
+		if i == 0 {
+			k, _, _ = detectSingleByteXOR(column[:columnLength], uppercaseFreq)
+		} else {
+			k, _, _ = detectSingleByteXOR(column[:columnLength], freq)
+		}
+		keyStream = append(keyStream, k)
+	}
+	return keyStream
+}
