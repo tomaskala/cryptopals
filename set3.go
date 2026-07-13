@@ -5,6 +5,9 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
+	mathrand "math/rand/v2"
+	"time"
 )
 
 func newCBCPaddingOracle(plaintext []byte) (
@@ -181,4 +184,33 @@ func (mt *mt19937) generate() uint32 {
 	y ^= (y >> 18)
 
 	return y
+}
+
+const (
+	minSleep = 40
+	maxSleep = 100
+)
+
+func generateFromTimeSeed() uint32 {
+	sleep := minSleep + mathrand.Int64N(maxSleep-minSleep+1)
+	time.Sleep(time.Duration(sleep) * time.Millisecond)
+
+	seed := time.Now().UnixMilli()
+
+	sleep = minSleep + mathrand.Int64N(maxSleep-minSleep+1)
+	time.Sleep(time.Duration(sleep) * time.Millisecond)
+
+	return newMT19937(uint32(seed)).generate()
+}
+
+func crackMT19937(r uint32, maxIter int) uint32 {
+	seed := time.Now().UnixMilli()
+	for range maxIter {
+		mt := newMT19937(uint32(seed))
+		if mt.generate() == r {
+			return uint32(seed)
+		}
+		seed--
+	}
+	panic(fmt.Sprintf("MT19937 not cracked within %d iterations", maxIter))
 }

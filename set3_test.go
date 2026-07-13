@@ -363,6 +363,14 @@ func TestChallenge21(t *testing.T) {
 	}
 }
 
+func TestChallenge22(t *testing.T) {
+	maxIter := 1000
+	r := generateFromTimeSeed()
+	seed := crackMT19937(r, maxIter)
+	t.Logf("generated number: %d", r)
+	t.Logf("cracked seed: %d", seed)
+}
+
 // Needed to set the same seed as in the provided test vectors.
 func newMT19937FromArray(t *testing.T, key []uint32) *mt19937 {
 	t.Helper()
