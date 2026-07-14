@@ -158,31 +158,35 @@ func newMT19937(seed uint32) *mt19937 {
 
 func (mt *mt19937) generate() uint32 {
 	if mt.index >= mtN {
-		// Twisting
-		var kk int
-		var y uint32
-		for kk = 0; kk < mtN-mtM; kk++ {
-			y = (mt.state[kk] & mtUpperMask) | (mt.state[kk+1] & mtLowerMask)
-			mt.state[kk] = mt.state[kk+mtM] ^ (y >> 1) ^ mtMag01[y&0x01]
-		}
-		for ; kk < mtN-1; kk++ {
-			y = (mt.state[kk] & mtUpperMask) | (mt.state[kk+1] & mtLowerMask)
-			mt.state[kk] = mt.state[kk+(mtM-mtN)] ^ (y >> 1) ^ mtMag01[y&0x01]
-		}
-		y = (mt.state[mtN-1] & mtUpperMask) | (mt.state[0] & mtLowerMask)
-		mt.state[mtN-1] = mt.state[mtM-1] ^ (y >> 1) ^ mtMag01[y&0x01]
-		mt.index = 0
+		mt.twist()
 	}
 
 	y := mt.state[mt.index]
 	mt.index++
+	return temper(y)
+}
 
-	// Tempering
+func (mt *mt19937) twist() {
+	var kk int
+	var y uint32
+	for kk = 0; kk < mtN-mtM; kk++ {
+		y = (mt.state[kk] & mtUpperMask) | (mt.state[kk+1] & mtLowerMask)
+		mt.state[kk] = mt.state[kk+mtM] ^ (y >> 1) ^ mtMag01[y&0x01]
+	}
+	for ; kk < mtN-1; kk++ {
+		y = (mt.state[kk] & mtUpperMask) | (mt.state[kk+1] & mtLowerMask)
+		mt.state[kk] = mt.state[kk+(mtM-mtN)] ^ (y >> 1) ^ mtMag01[y&0x01]
+	}
+	y = (mt.state[mtN-1] & mtUpperMask) | (mt.state[0] & mtLowerMask)
+	mt.state[mtN-1] = mt.state[mtM-1] ^ (y >> 1) ^ mtMag01[y&0x01]
+	mt.index = 0
+}
+
+func temper(y uint32) uint32 {
 	y ^= (y >> 11)
-	y ^= (y << 7) & 0x9d2c5680
-	y ^= (y << 15) & 0xefc60000
+	y ^= ((y << 7) & 0x9d2c5680)
+	y ^= ((y << 15) & 0xefc60000)
 	y ^= (y >> 18)
-
 	return y
 }
 
@@ -213,4 +217,37 @@ func crackMT19937(r uint32, maxIter int) uint32 {
 		seed--
 	}
 	panic(fmt.Sprintf("MT19937 not cracked within %d iterations", maxIter))
+}
+
+func recoverMT19937Seed(samples [mtN]uint32) [mtN]uint32 {
+	var state [mtN]uint32
+	for i := range state {
+		y := untemper(samples[len(samples)-i-1])
+		state[len(samples)-i-1] = y
+	}
+	return state
+}
+
+func untemper(y uint32) uint32 {
+	y = untemperRightShiftXor(y, 18)
+	y = untemperLeftShiftXorAnd(y, 15, 0xefc60000)
+	y = untemperLeftShiftXorAnd(y, 7, 0x9d2c5680)
+	y = untemperRightShiftXor(y, 11)
+	return y
+}
+
+func untemperRightShiftXor(y uint32, shift int) uint32 {
+	x := y
+	for range 32/shift + 1 {
+		x = y ^ (x >> shift)
+	}
+	return x
+}
+
+func untemperLeftShiftXorAnd(y uint32, shift, mask uint32) uint32 {
+	x := y
+	for range 32/shift + 1 {
+		x = y ^ ((x << shift) & mask)
+	}
+	return x
 }

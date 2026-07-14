@@ -371,6 +371,63 @@ func TestChallenge22(t *testing.T) {
 	t.Logf("cracked seed: %d", seed)
 }
 
+func TestChallenge23(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		offset int
+	}{
+		{
+			"start at the beginning",
+			0,
+		},
+		{
+			"start after the first period",
+			mtN,
+		},
+		{
+			"start in the middle of the first period",
+			mtN / 3,
+		},
+		{
+			"start in the middle of the second period",
+			mtN + mtN/3,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			seed := uint32(1234)
+			mt := newMT19937(seed)
+
+			samples := make([]uint32, 3*mtN)
+			for i := range samples {
+				samples[i] = mt.generate()
+			}
+
+			found := false
+			for i := tt.offset; i < len(samples)-mtN; i++ {
+				recoveredState := recoverMT19937Seed([mtN]uint32(samples[i : i+mtN]))
+				recoveredMT := newMT19937FromState(t, recoveredState)
+
+				if recoveredMT.generate() == samples[i+mtN] {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Errorf("correct state not found")
+			}
+		})
+	}
+}
+
+func newMT19937FromState(t *testing.T, state [mtN]uint32) *mt19937 {
+	t.Helper()
+
+	mt := newMT19937(0)
+	mt.state = state
+	return mt
+}
+
 // Needed to set the same seed as in the provided test vectors.
 func newMT19937FromArray(t *testing.T, key []uint32) *mt19937 {
 	t.Helper()
