@@ -420,6 +420,24 @@ func TestChallenge23(t *testing.T) {
 	}
 }
 
+func TestChallenge24(t *testing.T) {
+	plaintext := bytes.Repeat([]byte{'A'}, 14)
+	oracle := newMT19937EncryptionOracle()
+	ciphertext := oracle(plaintext)
+
+	seed, ok := recoverMT19937Key(plaintext, ciphertext)
+	if ok {
+		t.Logf("found seed: %d", seed)
+	} else {
+		t.Errorf("seed not found")
+	}
+
+	token := generateMT19937Token()
+	if !detectMT19937Token(token) {
+		t.Errorf("token not detected")
+	}
+}
+
 func newMT19937FromState(t *testing.T, state [mtN]uint32) *mt19937 {
 	t.Helper()
 

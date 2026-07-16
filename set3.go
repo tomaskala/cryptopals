@@ -1,6 +1,7 @@
 package cryptopals
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -250,4 +251,77 @@ func untemperLeftShiftXorAnd(y uint32, shift, mask uint32) uint32 {
 		x = y ^ ((x << shift) & mask)
 	}
 	return x
+}
+
+func encryptMT19937(key uint16, bs []byte) []byte {
+	mt := newMT19937(uint32(key))
+	keyStream := make([]byte, len(bs))
+	for i := 0; i < len(keyStream)-3; i += 4 {
+		r := mt.generate()
+		keyStream[i+0] = byte(r >> 0)
+		keyStream[i+1] = byte(r >> 1)
+		keyStream[i+2] = byte(r >> 2)
+		keyStream[i+3] = byte(r >> 3)
+	}
+	return fixedXor(keyStream, bs)
+}
+
+func newMT19937EncryptionOracle() func([]byte) []byte {
+	var key [2]byte
+	rand.Read(key[:])
+	seed := binary.LittleEndian.Uint16(key[:])
+
+	prefixLength := 10 + mathrand.IntN(40)
+	prefix := make([]byte, prefixLength)
+	rand.Read(prefix)
+
+	return func(plaintext []byte) []byte {
+		bs := append(prefix, plaintext...)
+		return encryptMT19937(seed, bs)
+	}
+}
+
+func recoverMT19937Key(plaintext, ciphertext []byte) (uint16, bool) {
+	for i := 0; i < 65536; i++ {
+		bs := encryptMT19937(uint16(i), ciphertext)
+		if bytes.HasSuffix(bs, plaintext) {
+			return uint16(i), true
+		}
+	}
+	return 0, false
+}
+
+func generateMT19937Token() []byte {
+	seed := uint32(time.Now().Unix())
+	mt := newMT19937(seed)
+	var token [32]byte
+	for i := 0; i < len(token); i += 4 {
+		r := mt.generate()
+		token[i+0] = byte(r >> 0)
+		token[i+1] = byte(r >> 1)
+		token[i+2] = byte(r >> 2)
+		token[i+3] = byte(r >> 3)
+	}
+	return token[:]
+}
+
+func detectMT19937Token(bs []byte) bool {
+	token := make([]byte, len(bs))
+	for i := uint32(0); i < 60*60*24; i++ {
+		seed := uint32(time.Now().Unix()) - i
+		mt := newMT19937(uint32(seed))
+
+		for i := 0; i < len(token); i += 4 {
+			r := mt.generate()
+			token[i+0] = byte(r >> 0)
+			token[i+1] = byte(r >> 1)
+			token[i+2] = byte(r >> 2)
+			token[i+3] = byte(r >> 3)
+		}
+
+		if bytes.Equal(bs, token) {
+			return true
+		}
+	}
+	return false
 }
