@@ -24,3 +24,22 @@ func TestChallenge25(t *testing.T) {
 		t.Errorf("expected: %s, got: %s", plaintext, recovered)
 	}
 }
+
+func TestChallenge26(t *testing.T) {
+	generateCookie, isAdmin := newCTRCookieOracle()
+
+	if isAdmin(generateCookie("")) {
+		t.Fatalf("already admin")
+	}
+
+	query := "AadminAtrueA"
+	cookie := generateCookie(query)
+	attack := []byte(cookie)
+	attack[32+0] ^= query[0] ^ ';'
+	attack[32+6] ^= query[6] ^ '='
+	attack[32+11] ^= query[11] ^ ';'
+
+	if !isAdmin(string(attack)) {
+		t.Errorf("not an admin")
+	}
+}

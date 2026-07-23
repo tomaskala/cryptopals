@@ -44,3 +44,34 @@ func breakRandomAccessCTR(ciphertext []byte, edit func([]byte, int, []byte) []by
 	}
 	return plaintext
 }
+
+func newCTRCookieOracle() (
+	generateCookie func(string) string,
+	isAdmin func(string) bool,
+) {
+	key := make([]byte, aesBlockSize)
+	rand.Read(key)
+
+	nonce := make([]byte, aesBlockSize/2)
+	rand.Read(nonce)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	prefix := "comment1=cooking%20MCs;userdata="
+	suffix := ";comment2=%20like%20a%20pound%20of%20bacon"
+
+	generateCookie = func(input string) string {
+		sanitized := strings.ReplaceAll(input, ";", "")
+		sanitized = strings.ReplaceAll(sanitized, "=", "")
+		cookie := prefix + sanitized + suffix
+		return string(encryptCTR(nonce, []byte(cookie), block))
+	}
+	isAdmin = func(s string) bool {
+		buf := decryptCTR(nonce, []byte(s), block)
+		return strings.Contains(string(buf), ";admin=true;")
+	}
+	return
+}
