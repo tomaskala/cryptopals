@@ -1,8 +1,11 @@
 package cryptopals
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/rand"
+	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -74,4 +77,56 @@ func newCTRCookieOracle() (
 		return strings.Contains(string(buf), ";admin=true;")
 	}
 	return
+}
+
+var printableASCII = regexp.MustCompile("^[ -~]+$")
+
+func newCBCSharedKeyIVOracle() (
+	encryptMessage func([]byte) []byte,
+	decryptMessage func([]byte) error,
+	checkKey func([]byte) bool,
+) {
+	key := make([]byte, aesBlockSize)
+	rand.Read(key)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	encryptMessage = func(bs []byte) []byte {
+		buf := padPKCS7(bs, aesBlockSize)
+		return encryptCBC(key, buf, block)
+	}
+	decryptMessage = func(bs []byte) error {
+		buf := unpadPKCS7(decryptCBC(key, bs, block))
+		if !printableASCII.Match(buf) {
+			return fmt.Errorf("invalid message: %s", buf)
+		}
+		return nil
+	}
+	checkKey = func(bs []byte) bool {
+		return bytes.Equal(bs, key)
+	}
+	return
+}
+
+func breakCBCSharedKeyIVOracle(encrypt func([]byte) []byte, decrypt func([]byte) error) []byte {
+	msg := bytes.Repeat([]byte{'A'}, 4*aesBlockSize)
+	ciphertext := encrypt(msg)
+
+	for i := range aesBlockSize {
+		ciphertext[aesBlockSize+i] = 0x00
+		ciphertext[2*aesBlockSize+i] = ciphertext[i]
+	}
+
+	err := decrypt(ciphertext)
+	if err == nil {
+		return nil
+	}
+
+	plaintext := []byte(strings.TrimPrefix(err.Error(), "invalid message: "))
+	p1 := plaintext[:aesBlockSize]
+	p3 := plaintext[2*aesBlockSize : 3*aesBlockSize]
+	return fixedXor(p1, p3)
 }

@@ -43,3 +43,11 @@ func TestChallenge26(t *testing.T) {
 		t.Errorf("not an admin")
 	}
 }
+
+func TestChallenge27(t *testing.T) {
+	encrypt, decrypt, checkKey := newCBCSharedKeyIVOracle()
+	key := breakCBCSharedKeyIVOracle(encrypt, decrypt)
+	if !checkKey(key) {
+		t.Errorf("incorrect key: %v", key)
+	}
+}
