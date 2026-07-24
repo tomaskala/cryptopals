@@ -153,8 +153,7 @@ func breakECBSuffixOracle(oracle func([]byte) []byte) []byte {
 		dict := buildDictionary(target[:i])
 		attack := bytes.Repeat([]byte{'A'}, modulo(blockSize-i-1, blockSize))
 		skip := (i / blockSize) * blockSize
-		res := string(oracle(attack)[skip : skip+blockSize])
-		target[i] = dict[res]
+		target[i] = dict[string(oracle(attack)[skip:skip+blockSize])]
 	}
 
 	return target
