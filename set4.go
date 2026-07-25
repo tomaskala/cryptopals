@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"math/bits"
 	"regexp"
 	"strings"
 )
@@ -129,4 +131,171 @@ func breakCBCSharedKeyIVOracle(encrypt func([]byte) []byte, decrypt func([]byte)
 	p1 := plaintext[:aesBlockSize]
 	p3 := plaintext[2*aesBlockSize : 3*aesBlockSize]
 	return fixedXor(p1, p3)
+}
+
+const (
+	sha1Size  = 20
+	sha1Chunk = 64
+
+	sha1Init0 = 0x67452301
+	sha1Init1 = 0xEFCDAB89
+	sha1Init2 = 0x98BADCFE
+	sha1Init3 = 0x10325476
+	sha1Init4 = 0xC3D2E1F0
+
+	sha1K0 = 0x5A827999
+	sha1K1 = 0x6ED9EBA1
+	sha1K2 = 0x8F1BBCDC
+	sha1K3 = 0xCA62C1D6
+)
+
+type sha1State struct {
+	h   [5]uint32
+	x   [sha1Chunk]byte
+	nx  int
+	len uint64
+}
+
+func newSHA1() *sha1State {
+	s := new(sha1State)
+	s.reset()
+	return s
+}
+
+func (s *sha1State) reset() {
+	s.h[0] = sha1Init0
+	s.h[1] = sha1Init1
+	s.h[2] = sha1Init2
+	s.h[3] = sha1Init3
+	s.h[4] = sha1Init4
+	s.nx = 0
+	s.len = 0
+}
+
+func (s *sha1State) Write(p []byte) (nn int, err error) {
+	nn = len(p)
+	s.len += uint64(nn)
+	if s.nx > 0 {
+		n := copy(s.x[s.nx:], p)
+		s.nx += n
+		if s.nx == sha1Chunk {
+			block(s, s.x[:])
+			s.nx = 0
+		}
+		p = p[n:]
+	}
+	if len(p) >= sha1Chunk {
+		n := len(p) &^ (sha1Chunk - 1)
+		block(s, p[:n])
+		p = p[n:]
+	}
+	if len(p) > 0 {
+		s.nx = copy(s.x[:], p)
+	}
+	return
+}
+
+func block(s *sha1State, p []byte) {
+	var w [16]uint32
+
+	h0, h1, h2, h3, h4 := s.h[0], s.h[1], s.h[2], s.h[3], s.h[4]
+	for len(p) >= sha1Chunk {
+		// Can interlace the computation of w with the
+		// rounds below if needed for speed.
+		for i := 0; i < 16; i++ {
+			j := i * 4
+			w[i] = uint32(p[j])<<24 | uint32(p[j+1])<<16 | uint32(p[j+2])<<8 | uint32(p[j+3])
+		}
+
+		a, b, c, d, e := h0, h1, h2, h3, h4
+
+		// Each of the four 20-iteration rounds
+		// differs only in the computation of f and
+		// the choice of K (_K0, _K1, etc).
+		i := 0
+		for ; i < 16; i++ {
+			f := b&c | (^b)&d
+			t := bits.RotateLeft32(a, 5) + f + e + w[i&0xf] + sha1K0
+			a, b, c, d, e = t, a, bits.RotateLeft32(b, 30), c, d
+		}
+		for ; i < 20; i++ {
+			tmp := w[(i-3)&0xf] ^ w[(i-8)&0xf] ^ w[(i-14)&0xf] ^ w[(i)&0xf]
+			w[i&0xf] = bits.RotateLeft32(tmp, 1)
+
+			f := b&c | (^b)&d
+			t := bits.RotateLeft32(a, 5) + f + e + w[i&0xf] + sha1K0
+			a, b, c, d, e = t, a, bits.RotateLeft32(b, 30), c, d
+		}
+		for ; i < 40; i++ {
+			tmp := w[(i-3)&0xf] ^ w[(i-8)&0xf] ^ w[(i-14)&0xf] ^ w[(i)&0xf]
+			w[i&0xf] = bits.RotateLeft32(tmp, 1)
+			f := b ^ c ^ d
+			t := bits.RotateLeft32(a, 5) + f + e + w[i&0xf] + sha1K1
+			a, b, c, d, e = t, a, bits.RotateLeft32(b, 30), c, d
+		}
+		for ; i < 60; i++ {
+			tmp := w[(i-3)&0xf] ^ w[(i-8)&0xf] ^ w[(i-14)&0xf] ^ w[(i)&0xf]
+			w[i&0xf] = bits.RotateLeft32(tmp, 1)
+			f := ((b | c) & d) | (b & c)
+			t := bits.RotateLeft32(a, 5) + f + e + w[i&0xf] + sha1K2
+			a, b, c, d, e = t, a, bits.RotateLeft32(b, 30), c, d
+		}
+		for ; i < 80; i++ {
+			tmp := w[(i-3)&0xf] ^ w[(i-8)&0xf] ^ w[(i-14)&0xf] ^ w[(i)&0xf]
+			w[i&0xf] = bits.RotateLeft32(tmp, 1)
+			f := b ^ c ^ d
+			t := bits.RotateLeft32(a, 5) + f + e + w[i&0xf] + sha1K3
+			a, b, c, d, e = t, a, bits.RotateLeft32(b, 30), c, d
+		}
+
+		h0 += a
+		h1 += b
+		h2 += c
+		h3 += d
+		h4 += e
+
+		p = p[sha1Chunk:]
+	}
+
+	s.h[0], s.h[1], s.h[2], s.h[3], s.h[4] = h0, h1, h2, h3, h4
+}
+
+func (s *sha1State) digest() [sha1Size]byte {
+	len := s.len
+	// Padding.  Add a 1 bit and 0 bits until 56 bytes mod 64.
+	var tmp [64 + 8]byte // padding + length buffer
+	tmp[0] = 0x80
+	var t uint64
+	if len%64 < 56 {
+		t = 56 - len%64
+	} else {
+		t = 64 + 56 - len%64
+	}
+
+	// Length in bits.
+	len <<= 3
+	padlen := tmp[:t+8]
+	binary.BigEndian.PutUint64(padlen[t:], len)
+	s.Write(padlen)
+
+	if s.nx != 0 {
+		panic("d.nx != 0")
+	}
+
+	var digest [sha1Size]byte
+
+	binary.BigEndian.PutUint32(digest[0:], s.h[0])
+	binary.BigEndian.PutUint32(digest[4:], s.h[1])
+	binary.BigEndian.PutUint32(digest[8:], s.h[2])
+	binary.BigEndian.PutUint32(digest[12:], s.h[3])
+	binary.BigEndian.PutUint32(digest[16:], s.h[4])
+
+	return digest
+}
+
+func newKeyedSHA1(key, msg []byte) [sha1Size]byte {
+	sha1 := newSHA1()
+	sha1.Write(key)
+	sha1.Write(msg)
+	return sha1.digest()
 }

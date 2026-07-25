@@ -3,6 +3,8 @@ package cryptopals
 import (
 	"bytes"
 	"crypto/aes"
+	"crypto/rand"
+	"encoding/hex"
 	"testing"
 )
 
@@ -49,5 +51,65 @@ func TestChallenge27(t *testing.T) {
 	key := breakCBCSharedKeyIVOracle(encrypt, decrypt)
 	if !checkKey(key) {
 		t.Errorf("incorrect key: %v", key)
+	}
+}
+
+func TestChallenge28(t *testing.T) {
+	for _, tt := range []struct {
+		input   string
+		hashHex string
+	}{
+		{
+			input:   "abc",
+			hashHex: "a9993e364706816aba3e25717850c26c9cd0d89d",
+		},
+		{
+			input:   "",
+			hashHex: "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+		},
+		{
+			input:   "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+			hashHex: "84983e441c3bd26ebaae4aa1f95129e5e54670f1",
+		},
+		{
+			input:   "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
+			hashHex: "a49b2446a02c645bf419f995b67091253a04a259",
+		},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			expectedDigest, err := hex.DecodeString(tt.hashHex)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(expectedDigest) != sha1Size {
+				t.Fatalf("expected hash length %d, got %d", sha1Size, len(expectedDigest))
+			}
+
+			sha1 := newSHA1()
+			n, err := sha1.Write([]byte(tt.input))
+			if err != nil {
+				t.Errorf("SHA-1 write: %v", err)
+			}
+			if n != len(tt.input) {
+				t.Errorf("SHA-1 partial write: expected %d bytes, got %d", len(tt.input), n)
+			}
+
+			digest := sha1.digest()
+			if !bytes.Equal(digest[:], expectedDigest) {
+				t.Errorf("expected digest: %v, got %v", expectedDigest, digest)
+			}
+		})
+	}
+
+	key := make([]byte, aesBlockSize)
+	rand.Read(key)
+
+	msg := []byte("abcdefgh")
+	digest1 := newKeyedSHA1(key, msg)
+	msg[0] = 'b'
+	digest2 := newKeyedSHA1(key, msg)
+
+	if digest1 == digest2 {
+		t.Errorf("keyed digests equal for different messages: %v == %v", digest1, digest2)
 	}
 }
