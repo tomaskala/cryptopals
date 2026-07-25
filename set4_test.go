@@ -113,3 +113,39 @@ func TestChallenge28(t *testing.T) {
 		t.Errorf("keyed digests equal for different messages: %v == %v", digest1, digest2)
 	}
 }
+
+func TestChallenge29(t *testing.T) {
+	msg := []byte("hello, cryptopals!")
+
+	sha1A := newSHA1()
+	sha1A.Write(msg)
+	sha1A.digest()
+
+	sha1B := newSHA1()
+	sha1B.Write(msg)
+	sha1B.Write(padSHA1(len(msg)))
+
+	if sha1A.nx != 0 {
+		t.Fatal("sha1A nx != 0")
+	}
+	if sha1A.h != sha1B.h {
+		t.Fatalf("expected the same states for unpadded and padded messages, got %v and %v", sha1A.h, sha1B.h)
+	}
+
+	cookie, isAdmin := newKeyedSHA1CookieOracle()
+	if isAdmin(cookie) {
+		t.Fatalf("already admin")
+	}
+
+	found := false
+	for keySize := 2; keySize < 101; keySize++ {
+		adminCookie := breakKeyedSHA1CookieOracle(cookie, keySize)
+		if isAdmin(adminCookie) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("not an admin")
+	}
+}

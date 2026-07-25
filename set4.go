@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/bits"
+	mathrand "math/rand/v2"
 	"regexp"
 	"strings"
 )
@@ -150,10 +151,10 @@ const (
 )
 
 type sha1State struct {
-	h   [5]uint32
-	x   [sha1Chunk]byte
-	nx  int
-	len uint64
+	h      [5]uint32
+	x      [sha1Chunk]byte
+	nx     int
+	length uint64
 }
 
 func newSHA1() *sha1State {
@@ -169,12 +170,12 @@ func (s *sha1State) reset() {
 	s.h[3] = sha1Init3
 	s.h[4] = sha1Init4
 	s.nx = 0
-	s.len = 0
+	s.length = 0
 }
 
 func (s *sha1State) Write(p []byte) (nn int, err error) {
 	nn = len(p)
-	s.len += uint64(nn)
+	s.length += uint64(nn)
 	if s.nx > 0 {
 		n := copy(s.x[s.nx:], p)
 		s.nx += n
@@ -202,7 +203,7 @@ func block(s *sha1State, p []byte) {
 	for len(p) >= sha1Chunk {
 		// Can interlace the computation of w with the
 		// rounds below if needed for speed.
-		for i := 0; i < 16; i++ {
+		for i := range 16 {
 			j := i * 4
 			w[i] = uint32(p[j])<<24 | uint32(p[j+1])<<16 | uint32(p[j+2])<<8 | uint32(p[j+3])
 		}
@@ -261,22 +262,22 @@ func block(s *sha1State, p []byte) {
 }
 
 func (s *sha1State) digest() [sha1Size]byte {
-	len := s.len
+	length := s.length
 	// Padding.  Add a 1 bit and 0 bits until 56 bytes mod 64.
 	var tmp [64 + 8]byte // padding + length buffer
 	tmp[0] = 0x80
 	var t uint64
-	if len%64 < 56 {
-		t = 56 - len%64
+	if length%64 < 56 {
+		t = 56 - length%64
 	} else {
-		t = 64 + 56 - len%64
+		t = 64 + 56 - length%64
 	}
 
 	// Length in bits.
-	len <<= 3
-	padlen := tmp[:t+8]
-	binary.BigEndian.PutUint64(padlen[t:], len)
-	s.Write(padlen)
+	length <<= 3
+	padLength := tmp[:t+8]
+	binary.BigEndian.PutUint64(padLength[t:], length)
+	s.Write(padLength)
 
 	if s.nx != 0 {
 		panic("d.nx != 0")
@@ -298,4 +299,69 @@ func newKeyedSHA1(key, msg []byte) [sha1Size]byte {
 	sha1.Write(key)
 	sha1.Write(msg)
 	return sha1.digest()
+}
+
+func verifyKeyedSHA1(key, msg, expected []byte) bool {
+	digest := newKeyedSHA1(key, msg)
+	return bytes.Equal(digest[:], expected)
+}
+
+func padSHA1(msgLength int) []byte {
+	length := uint64(msgLength)
+	var tmp [64 + 8]byte
+	tmp[0] = 0x80
+	var t uint64
+	if length%64 < 56 {
+		t = 56 - length%64
+	} else {
+		t = 64 + 56 - length%64
+	}
+
+	length <<= 3
+	padLength := tmp[:t+8]
+	binary.BigEndian.PutUint64(padLength[t:], length)
+	return padLength
+}
+
+func newKeyedSHA1CookieOracle() (
+	cookie []byte,
+	isAdmin func([]byte) bool,
+) {
+	key := make([]byte, 2+mathrand.IntN(100-1))
+	rand.Read(key)
+
+	msg := []byte("comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon")
+	digest := newKeyedSHA1(key, msg)
+
+	cookie = append(cookie, digest[:]...)
+	cookie = append(cookie, msg...)
+
+	isAdmin = func(bs []byte) bool {
+		mac, msg := bs[:sha1Size], bs[sha1Size:]
+		if !verifyKeyedSHA1(key, msg, mac) {
+			return false
+		}
+		return bytes.Contains(msg, []byte(";admin=true"))
+	}
+	return
+}
+
+func breakKeyedSHA1CookieOracle(cookie []byte, keySize int) []byte {
+	mac, msg := cookie[:sha1Size], cookie[sha1Size:]
+
+	padding := padSHA1(keySize + len(msg))
+	attack := []byte(";admin=true")
+
+	sha1 := newSHA1()
+	sha1.h[0] = binary.BigEndian.Uint32(mac[0:])
+	sha1.h[1] = binary.BigEndian.Uint32(mac[4:])
+	sha1.h[2] = binary.BigEndian.Uint32(mac[8:])
+	sha1.h[3] = binary.BigEndian.Uint32(mac[12:])
+	sha1.h[4] = binary.BigEndian.Uint32(mac[16:])
+	sha1.length = uint64(keySize + len(msg) + len(padding))
+	sha1.Write(attack)
+
+	adminCookie := append(append(msg, padding...), attack...)
+	adminDigest := sha1.digest()
+	return append(adminDigest[:], adminCookie...)
 }
