@@ -180,14 +180,14 @@ func (s *sha1State) Write(p []byte) (nn int, err error) {
 		n := copy(s.x[s.nx:], p)
 		s.nx += n
 		if s.nx == sha1Chunk {
-			block(s, s.x[:])
+			s.block(s.x[:])
 			s.nx = 0
 		}
 		p = p[n:]
 	}
 	if len(p) >= sha1Chunk {
 		n := len(p) &^ (sha1Chunk - 1)
-		block(s, p[:n])
+		s.block(p[:n])
 		p = p[n:]
 	}
 	if len(p) > 0 {
@@ -196,7 +196,7 @@ func (s *sha1State) Write(p []byte) (nn int, err error) {
 	return
 }
 
-func block(s *sha1State, p []byte) {
+func (s *sha1State) block(p []byte) {
 	var w [16]uint32
 
 	h0, h1, h2, h3, h4 := s.h[0], s.h[1], s.h[2], s.h[3], s.h[4]
@@ -363,5 +363,244 @@ func breakKeyedSHA1CookieOracle(cookie []byte, keySize int) []byte {
 
 	adminCookie := append(append(msg, padding...), attack...)
 	adminDigest := sha1.digest()
+	return append(adminDigest[:], adminCookie...)
+}
+
+const (
+	md4Size  = 16
+	md4Chunk = 64
+
+	md4Init0 = 0x67452301
+	md4Init1 = 0xEFCDAB89
+	md4Init2 = 0x98BADCFE
+	md4Init3 = 0x10325476
+)
+
+type md4State struct {
+	s      [md4Size / 4]uint32
+	x      [md4Chunk]byte
+	nx     int
+	length uint64
+}
+
+func (m *md4State) reset() {
+	m.s[0] = md4Init0
+	m.s[1] = md4Init1
+	m.s[2] = md4Init2
+	m.s[3] = md4Init3
+	m.nx = 0
+	m.length = 0
+}
+
+func newMD4() *md4State {
+	m := new(md4State)
+	m.reset()
+	return m
+}
+
+func (m *md4State) Write(p []byte) (nn int, err error) {
+	nn = len(p)
+	m.length += uint64(nn)
+	if m.nx > 0 {
+		n := min(len(p), md4Chunk-m.nx)
+		for i := range n {
+			m.x[m.nx+i] = p[i]
+		}
+		m.nx += n
+		if m.nx == md4Chunk {
+			m.block(m.x[0:])
+			m.nx = 0
+		}
+		p = p[n:]
+	}
+	n := m.block(p)
+	p = p[n:]
+	if len(p) > 0 {
+		m.nx = copy(m.x[:], p)
+	}
+	return
+}
+
+var (
+	md4Shift1 = []int{3, 7, 11, 19}
+	md4Shift2 = []int{3, 5, 9, 13}
+	md4Shift3 = []int{3, 9, 11, 15}
+
+	md4XIndex2 = []uint{0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15}
+	md4XIndex3 = []uint{0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15}
+)
+
+func (m *md4State) block(p []byte) int {
+	a := m.s[0]
+	b := m.s[1]
+	c := m.s[2]
+	d := m.s[3]
+	n := 0
+	var X [16]uint32
+	for len(p) >= md4Chunk {
+		aa, bb, cc, dd := a, b, c, d
+
+		j := 0
+		for i := range 16 {
+			X[i] = uint32(p[j]) | uint32(p[j+1])<<8 | uint32(p[j+2])<<16 | uint32(p[j+3])<<24
+			j += 4
+		}
+
+		// If this needs to be made faster in the future,
+		// the usual trick is to unroll each of these
+		// loops by a factor of 4; that lets you replace
+		// the shift[] lookups with constants and,
+		// with suitable variable renaming in each
+		// unrolled body, delete the a, b, c, d = d, a, b, c
+		// (or you can let the optimizer do the renaming).
+		//
+		// The index variables are uint so that % by a power
+		// of two can be optimized easily by a compiler.
+
+		// Round 1.
+		for i := range uint(16) {
+			x := i
+			s := md4Shift1[i%4]
+			f := ((c ^ d) & b) ^ d
+			a += f + X[x]
+			a = bits.RotateLeft32(a, s)
+			a, b, c, d = d, a, b, c
+		}
+
+		// Round 2.
+		for i := range uint(16) {
+			x := md4XIndex2[i]
+			s := md4Shift2[i%4]
+			g := (b & c) | (b & d) | (c & d)
+			a += g + X[x] + 0x5a827999
+			a = bits.RotateLeft32(a, s)
+			a, b, c, d = d, a, b, c
+		}
+
+		// Round 3.
+		for i := range uint(16) {
+			x := md4XIndex3[i]
+			s := md4Shift3[i%4]
+			h := b ^ c ^ d
+			a += h + X[x] + 0x6ed9eba1
+			a = bits.RotateLeft32(a, s)
+			a, b, c, d = d, a, b, c
+		}
+
+		a += aa
+		b += bb
+		c += cc
+		d += dd
+
+		p = p[md4Chunk:]
+		n += md4Chunk
+	}
+
+	m.s[0] = a
+	m.s[1] = b
+	m.s[2] = c
+	m.s[3] = d
+	return n
+}
+
+func (m *md4State) digest() [md4Size]byte {
+	length := m.length
+	var tmp [64]byte
+	tmp[0] = 0x80
+	if length%64 < 56 {
+		m.Write(tmp[0 : 56-length%64])
+	} else {
+		m.Write(tmp[0 : 64+56-length%64])
+	}
+
+	// Length in bits.
+	length <<= 3
+	for i := range uint(8) {
+		tmp[i] = byte(length >> (8 * i))
+	}
+	m.Write(tmp[0:8])
+
+	if m.nx != 0 {
+		panic("d.nx != 0")
+	}
+
+	var digest [md4Size]byte
+
+	binary.LittleEndian.PutUint32(digest[0:], m.s[0])
+	binary.LittleEndian.PutUint32(digest[4:], m.s[1])
+	binary.LittleEndian.PutUint32(digest[8:], m.s[2])
+	binary.LittleEndian.PutUint32(digest[12:], m.s[3])
+
+	return digest
+}
+
+func newKeyedMD4(key, msg []byte) [md4Size]byte {
+	md4 := newMD4()
+	md4.Write(key)
+	md4.Write(msg)
+	return md4.digest()
+}
+
+func verifyKeyedMD4(key, msg, expected []byte) bool {
+	digest := newKeyedMD4(key, msg)
+	return bytes.Equal(digest[:], expected)
+}
+
+func padMD4(msgLength int) []byte {
+	length := uint64(msgLength)
+	var tmp [64 + 8]byte
+	tmp[0] = 0x80
+	var t uint64
+	if length%64 < 56 {
+		t = 56 - length%64
+	} else {
+		t = 64 + 56 - length%64
+	}
+
+	length <<= 3
+	padLength := tmp[:t+8]
+	binary.LittleEndian.PutUint64(padLength[t:], length)
+	return padLength
+}
+
+func newKeyedMD4CookieOracle() (
+	cookie []byte,
+	isAdmin func([]byte) bool,
+) {
+	key := make([]byte, 2+mathrand.IntN(100-1))
+	rand.Read(key)
+
+	msg := []byte("comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon")
+	digest := newKeyedMD4(key, msg)
+
+	cookie = append(cookie, digest[:]...)
+	cookie = append(cookie, msg...)
+
+	isAdmin = func(bs []byte) bool {
+		mac, msg := bs[:md4Size], bs[md4Size:]
+		if !verifyKeyedMD4(key, msg, mac) {
+			return false
+		}
+		return bytes.Contains(msg, []byte(";admin=true"))
+	}
+	return
+}
+
+func breakKeyedMD4CookieOracle(cookie []byte, keySize int) []byte {
+	mac, msg := cookie[:md4Size], cookie[md4Size:]
+
+	padding := padMD4(keySize + len(msg))
+	attack := []byte(";admin=true")
+
+	md4 := newMD4()
+	md4.s[0] = binary.LittleEndian.Uint32(mac[0:])
+	md4.s[1] = binary.LittleEndian.Uint32(mac[4:])
+	md4.s[2] = binary.LittleEndian.Uint32(mac[8:])
+	md4.s[3] = binary.LittleEndian.Uint32(mac[12:])
+	md4.length = uint64(keySize + len(msg) + len(padding))
+	md4.Write(attack)
+
+	adminCookie := append(append(msg, padding...), attack...)
+	adminDigest := md4.digest()
 	return append(adminDigest[:], adminCookie...)
 }

@@ -282,7 +282,7 @@ func newMT19937EncryptionOracle() func([]byte) []byte {
 }
 
 func recoverMT19937Key(plaintext, ciphertext []byte) (uint16, bool) {
-	for i := 0; i < 65536; i++ {
+	for i := range 65536 {
 		bs := encryptMT19937(uint16(i), ciphertext)
 		if bytes.HasSuffix(bs, plaintext) {
 			return uint16(i), true
@@ -307,7 +307,7 @@ func generateMT19937Token() []byte {
 
 func detectMT19937Token(bs []byte) bool {
 	token := make([]byte, len(bs))
-	for i := uint32(0); i < 60*60*24; i++ {
+	for i := range uint32(60 * 60 * 24) {
 		seed := uint32(time.Now().Unix()) - i
 		mt := newMT19937(uint32(seed))
 

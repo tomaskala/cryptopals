@@ -149,3 +149,97 @@ func TestChallenge29(t *testing.T) {
 		t.Errorf("not an admin")
 	}
 }
+
+func TestChallenge30(t *testing.T) {
+	for _, tt := range []struct {
+		input   string
+		hashHex string
+	}{
+		{
+			input:   "abc",
+			hashHex: "a448017aaf21d8525fc10ae87aa6729d",
+		},
+		{
+			input:   "",
+			hashHex: "31d6cfe0d16ae931b73c59d7e0c089c0",
+		},
+		{
+			input:   "abcdefghij",
+			hashHex: "dc959c6f5d6f9e04e4380777cc964b3d",
+		},
+		{
+			input:   "If the enemy is within range, then so are you.",
+			hashHex: "1d616d60a5fabe85589c3f1566ca7fca",
+		},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			expectedDigest, err := hex.DecodeString(tt.hashHex)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(expectedDigest) != md4Size {
+				t.Fatalf("expected hash length %d, got %d", md4Size, len(expectedDigest))
+			}
+
+			md4 := newMD4()
+			n, err := md4.Write([]byte(tt.input))
+			if err != nil {
+				t.Errorf("MD4 write: %v", err)
+			}
+			if n != len(tt.input) {
+				t.Errorf("MD4 partial write: expected %d bytes, got %d", len(tt.input), n)
+			}
+
+			digest := md4.digest()
+			if !bytes.Equal(digest[:], expectedDigest) {
+				t.Errorf("expected digest: %v, got %v", expectedDigest, digest)
+			}
+		})
+	}
+
+	key := make([]byte, aesBlockSize)
+	rand.Read(key)
+
+	msg := []byte("abcdefgh")
+	digest1 := newKeyedMD4(key, msg)
+	msg[0] = 'b'
+	digest2 := newKeyedMD4(key, msg)
+
+	if digest1 == digest2 {
+		t.Errorf("keyed digests equal for different messages: %v == %v", digest1, digest2)
+	}
+
+	msg = []byte("hello, cryptopals!")
+
+	md4A := newMD4()
+	md4A.Write(msg)
+	md4A.digest()
+
+	md4B := newMD4()
+	md4B.Write(msg)
+	md4B.Write(padMD4(len(msg)))
+
+	if md4A.nx != 0 {
+		t.Fatal("md4A nx != 0")
+	}
+	if md4A.s != md4B.s {
+		t.Fatalf("expected the same states for unpadded and padded messages, got %v and %v", md4A.s, md4B.s)
+	}
+
+	cookie, isAdmin := newKeyedMD4CookieOracle()
+	if isAdmin(cookie) {
+		t.Fatalf("already admin")
+	}
+
+	found := false
+	for keySize := 2; keySize < 101; keySize++ {
+		adminCookie := breakKeyedMD4CookieOracle(cookie, keySize)
+		if isAdmin(adminCookie) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("not an admin")
+	}
+}
