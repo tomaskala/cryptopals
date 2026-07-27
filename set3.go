@@ -91,7 +91,7 @@ func encryptCTR(nonce, bs []byte, block cipher.Block) []byte {
 		block.Encrypt(keyStream, secret)
 
 		blockLength := min(len(keyStream), len(bs[i:]))
-		res = append(res, fixedXor(keyStream[:blockLength], bs[i:i+blockLength])...)
+		res = append(res, fixedXOR(keyStream[:blockLength], bs[i:i+blockLength])...)
 	}
 	return res
 }
@@ -263,7 +263,7 @@ func encryptMT19937(key uint16, bs []byte) []byte {
 		keyStream[i+2] = byte(r >> 2)
 		keyStream[i+3] = byte(r >> 3)
 	}
-	return fixedXor(keyStream, bs)
+	return fixedXOR(keyStream, bs)
 }
 
 func newMT19937EncryptionOracle() func([]byte) []byte {

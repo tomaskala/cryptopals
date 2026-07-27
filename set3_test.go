@@ -145,7 +145,7 @@ func TestChallenge20(t *testing.T) {
 
 	keyStream := breakCTRReusedNonce(ciphertexts, freq)
 	for i, ciphertext := range ciphertexts {
-		t.Logf("decrypted %02d: %s", i, fixedXor(keyStream[:len(ciphertext)], ciphertext))
+		t.Logf("decrypted %02d: %s", i, fixedXOR(keyStream[:len(ciphertext)], ciphertext))
 	}
 }
 

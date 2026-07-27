@@ -10,6 +10,7 @@ import (
 	mathrand "math/rand/v2"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func newRandomAccessCTROracle() (
@@ -131,7 +132,7 @@ func breakCBCSharedKeyIVOracle(encrypt func([]byte) []byte, decrypt func([]byte)
 	plaintext := []byte(strings.TrimPrefix(err.Error(), "invalid message: "))
 	p1 := plaintext[:aesBlockSize]
 	p3 := plaintext[2*aesBlockSize : 3*aesBlockSize]
-	return fixedXor(p1, p3)
+	return fixedXOR(p1, p3)
 }
 
 const (
@@ -603,4 +604,88 @@ func breakKeyedMD4CookieOracle(cookie []byte, keySize int) []byte {
 	adminCookie := append(append(msg, padding...), attack...)
 	adminDigest := md4.digest()
 	return append(adminDigest[:], adminCookie...)
+}
+
+func newHMACSHA1Oracle(sleep time.Duration, keySize int) (
+	sign func([]byte) []byte,
+	verify func([]byte, []byte) bool,
+) {
+	key := make([]byte, 16)
+	rand.Read(key)
+
+	sign = func(file []byte) []byte {
+		signature := hmacSHA1(key, file)
+		return signature[:keySize]
+	}
+	verify = func(file, signature []byte) bool {
+		expectedSig := hmacSHA1(key, []byte(file))
+		return insecureCompare(signature, expectedSig[:keySize], sleep)
+	}
+	return
+}
+
+func hmacSHA1(key, msg []byte) [sha1Size]byte {
+	const blockSize = 16
+	blockKey := computeBlockKey(key, blockSize)
+
+	opad := bytes.Repeat([]byte{0x5c}, blockSize)
+	ipad := bytes.Repeat([]byte{0x36}, blockSize)
+
+	sha1Outer := newSHA1()
+	sha1Inner := newSHA1()
+
+	sha1Inner.Write(fixedXOR(ipad, blockKey))
+	sha1Inner.Write(msg)
+	innerDigest := sha1Inner.digest()
+
+	sha1Outer.Write(fixedXOR(opad, blockKey))
+	sha1Outer.Write(innerDigest[:])
+	return sha1Outer.digest()
+}
+
+func computeBlockKey(key []byte, blockSize int) []byte {
+	switch {
+	case len(key) > blockSize:
+		sha1 := newSHA1()
+		sha1.Write(key)
+		blockKey := sha1.digest()
+		return blockKey[:]
+	case len(key) < blockSize:
+		pad := make([]byte, blockSize-len(key))
+		return append(pad, key...)
+	default:
+		return key
+	}
+}
+
+func insecureCompare(a, b []byte, sleep time.Duration) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range len(a) {
+		if a[i] != b[i] {
+			return false
+		}
+		time.Sleep(sleep)
+	}
+	return true
+}
+
+func breakHMACSHA1Oracle(file []byte, verify func([]byte, []byte) bool, keySize int) []byte {
+	sig := make([]byte, keySize)
+	for i := range sig {
+		t0 := time.Now()
+		verify(file, sig)
+		zero := time.Since(t0)
+		for b := range 256 {
+			sig[i] = byte(b)
+			t0 := time.Now()
+			verify(file, sig)
+			duration := time.Since(t0)
+			if duration-zero > 25*time.Millisecond {
+				break
+			}
+		}
+	}
+	return sig
 }

@@ -46,7 +46,7 @@ func encryptCBC(iv, bs []byte, block cipher.Block) []byte {
 	res := make([]byte, len(bs))
 	prev := iv
 	for i := 0; i < len(bs); i += block.BlockSize() {
-		copy(res[i:i+block.BlockSize()], fixedXor(bs[i:i+block.BlockSize()], prev))
+		copy(res[i:i+block.BlockSize()], fixedXOR(bs[i:i+block.BlockSize()], prev))
 		block.Encrypt(res[i:], res[i:])
 		prev = res[i : i+block.BlockSize()]
 	}
@@ -65,7 +65,7 @@ func decryptCBC(iv, bs []byte, block cipher.Block) []byte {
 	prev := iv
 	for i := 0; i < len(bs); i += block.BlockSize() {
 		block.Decrypt(buf, bs[i:])
-		copy(res[i:], fixedXor(buf, prev))
+		copy(res[i:], fixedXOR(buf, prev))
 		prev = bs[i : i+block.BlockSize()]
 	}
 	return res

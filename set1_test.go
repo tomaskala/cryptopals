@@ -23,7 +23,7 @@ func TestChallenge02(t *testing.T) {
 	bs1 := hexDecode(t, "1c0111001f010100061a024b53535009181c")
 	bs2 := hexDecode(t, "686974207468652062756c6c277320657965")
 	expected := hexDecode(t, "746865206b696420646f6e277420706c6179")
-	xor := fixedXor(bs1, bs2)
+	xor := fixedXOR(bs1, bs2)
 
 	if !bytes.Equal(xor, expected) {
 		t.Errorf("expected: %v, got: %v", expected, xor)

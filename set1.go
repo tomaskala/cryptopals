@@ -18,7 +18,7 @@ func hexToBase64(s string) string {
 	return base64.StdEncoding.EncodeToString(decoded)
 }
 
-func fixedXor(bs1, bs2 []byte) []byte {
+func fixedXOR(bs1, bs2 []byte) []byte {
 	if len(bs1) != len(bs2) {
 		panic("buffer lengths differ")
 	}
