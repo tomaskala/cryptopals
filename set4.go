@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"math/bits"
 	mathrand "math/rand/v2"
 	"regexp"
@@ -671,19 +672,52 @@ func insecureCompare(a, b []byte, sleep time.Duration) bool {
 	return true
 }
 
+func timedVerify(file, sig []byte, verify func([]byte, []byte) bool) time.Duration {
+	t0 := time.Now()
+	verify(file, sig)
+	return time.Since(t0)
+}
+
 func breakHMACSHA1Oracle(file []byte, verify func([]byte, []byte) bool, keySize int) []byte {
 	sig := make([]byte, keySize)
 	for i := range sig {
-		t0 := time.Now()
-		verify(file, sig)
-		zero := time.Since(t0)
+		baseline := timedVerify(file, sig, verify)
+		found := false
 		for b := range 256 {
 			sig[i] = byte(b)
-			t0 := time.Now()
-			verify(file, sig)
-			duration := time.Since(t0)
-			if duration-zero > 25*time.Millisecond {
+			duration := timedVerify(file, sig, verify)
+			if duration-baseline > 25*time.Millisecond {
+				found = true
 				break
+			}
+		}
+		if !found {
+			sig[0] = 0x00
+		}
+	}
+	return sig
+}
+
+func breakFasterHMACSHA1Oracle(file []byte, verify func([]byte, []byte) bool, keySize, attempts int) []byte {
+	sig := make([]byte, keySize)
+	for i := range sig {
+		baseline := timedVerify(file, sig, verify)
+		var stats [256]time.Duration
+		for b := range stats {
+			stats[b] = time.Duration(math.MaxInt64)
+		}
+		for range attempts {
+			for b := range stats {
+				sig[i] = byte(b)
+				duration := timedVerify(file, sig, verify)
+				stats[b] = min(stats[b], duration-baseline)
+			}
+		}
+		maxStat := time.Duration(0)
+		for b, s := range stats {
+			if s > maxStat {
+				maxStat = s
+				sig[i] = byte(b)
 			}
 		}
 	}

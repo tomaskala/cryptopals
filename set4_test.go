@@ -268,3 +268,27 @@ func TestChallenge31(t *testing.T) {
 		t.Errorf("failed to recover signature for file %s: expected %v, got %v", file, sign(file), sig)
 	}
 }
+
+func TestChallenge32(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	keySize := 5
+
+	sign, verify := newHMACSHA1Oracle(1*time.Millisecond, keySize)
+	file1 := []byte("file1")
+	sig1 := sign(file1)
+	if !verify(file1, sig1) {
+		t.Fatalf("unexpected invalid signature %v for file %s", sig1, file1)
+	}
+	sig2 := sign([]byte("file2"))
+	if verify(file1, sig2) {
+		t.Fatalf("unexpected valid signature %v for file %s", sig2, file1)
+	}
+
+	file := []byte("super secret file")
+	sig := breakFasterHMACSHA1Oracle(file, verify, keySize, 5)
+	if !verify(file, sig) {
+		t.Errorf("failed to recover signature for file %s: expected %v, got %v", file, sign(file), sig)
+	}
+}
