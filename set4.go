@@ -626,7 +626,7 @@ func newHMACSHA1Oracle(sleep time.Duration, keySize int) (
 }
 
 func hmacSHA1(key, msg []byte) [sha1Size]byte {
-	const blockSize = 16
+	const blockSize = 64
 	blockKey := computeBlockKey(key, blockSize)
 
 	opad := bytes.Repeat([]byte{0x5c}, blockSize)
