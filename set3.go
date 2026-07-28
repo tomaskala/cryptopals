@@ -223,8 +223,7 @@ func crackMT19937(r uint32, maxIter int) uint32 {
 func recoverMT19937Seed(samples [mtN]uint32) [mtN]uint32 {
 	var state [mtN]uint32
 	for i := range state {
-		y := untemper(samples[len(samples)-i-1])
-		state[len(samples)-i-1] = y
+		state[i] = untemper(samples[i])
 	}
 	return state
 }
@@ -259,9 +258,9 @@ func encryptMT19937(key uint16, bs []byte) []byte {
 	for i := 0; i < len(keyStream)-3; i += 4 {
 		r := mt.generate()
 		keyStream[i+0] = byte(r >> 0)
-		keyStream[i+1] = byte(r >> 1)
-		keyStream[i+2] = byte(r >> 2)
-		keyStream[i+3] = byte(r >> 3)
+		keyStream[i+1] = byte(r >> 8)
+		keyStream[i+2] = byte(r >> 16)
+		keyStream[i+3] = byte(r >> 24)
 	}
 	return fixedXOR(keyStream, bs)
 }
@@ -298,9 +297,9 @@ func generateMT19937Token() []byte {
 	for i := 0; i < len(token); i += 4 {
 		r := mt.generate()
 		token[i+0] = byte(r >> 0)
-		token[i+1] = byte(r >> 1)
-		token[i+2] = byte(r >> 2)
-		token[i+3] = byte(r >> 3)
+		token[i+1] = byte(r >> 8)
+		token[i+2] = byte(r >> 16)
+		token[i+3] = byte(r >> 24)
 	}
 	return token[:]
 }
@@ -314,9 +313,9 @@ func detectMT19937Token(bs []byte) bool {
 		for i := 0; i < len(token); i += 4 {
 			r := mt.generate()
 			token[i+0] = byte(r >> 0)
-			token[i+1] = byte(r >> 1)
-			token[i+2] = byte(r >> 2)
-			token[i+3] = byte(r >> 3)
+			token[i+1] = byte(r >> 8)
+			token[i+2] = byte(r >> 16)
+			token[i+3] = byte(r >> 24)
 		}
 
 		if bytes.Equal(bs, token) {

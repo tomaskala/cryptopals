@@ -692,7 +692,7 @@ func breakHMACSHA1Oracle(file []byte, verify func([]byte, []byte) bool, keySize 
 			}
 		}
 		if !found {
-			sig[0] = 0x00
+			sig[i] = 0x00
 		}
 	}
 	return sig
