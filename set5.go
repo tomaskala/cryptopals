@@ -41,15 +41,19 @@ func newEchoPeer(dh dhParams) *echoPeer {
 	return &echoPeer{private: dh.genPrivate(), iv: iv}
 }
 
-func (p *echoPeer) deriveSecret(dh dhParams, public *big.Int) {
+func (p *echoPeer) initKey(dh dhParams, public *big.Int) {
 	secret := dh.genSecret(p.private, public)
+	p.key = deriveKey(secret)
+}
+
+func deriveKey(secret *big.Int) []byte {
 	sha1 := newSHA1()
 	_, err := sha1.Write(secret.Bytes())
 	if err != nil {
 		panic(err)
 	}
 	digest := sha1.digest()
-	p.key = digest[:aesBlockSize]
+	return digest[:aesBlockSize]
 }
 
 func (p *echoPeer) encrypt(msg []byte) []byte {
@@ -76,10 +80,10 @@ func createEchoBot(dh dhParams) (*echoPeer, *echoPeer) {
 	bob := newEchoPeer(dh)
 
 	A := dh.genPublic(alice.private)
-	bob.deriveSecret(dh, A)
+	bob.initKey(dh, A)
 
 	B := dh.genPublic(bob.private)
-	alice.deriveSecret(dh, B)
+	alice.initKey(dh, B)
 
 	return alice, bob
 }
@@ -91,9 +95,69 @@ func createMITMEchoBot(dh dhParams) (*echoPeer, *echoPeer, *echoPeer) {
 
 	E := dh.p
 
-	bob.deriveSecret(dh, E)
-	eve.deriveSecret(dh, big.NewInt(0))
-	alice.deriveSecret(dh, E)
+	bob.initKey(dh, E)
+	eve.key = deriveKey(big.NewInt(0))
+	alice.initKey(dh, E)
+
+	return alice, eve, bob
+}
+
+func createMITMEchoBotG1(dh dhParams) (*echoPeer, *echoPeer, *echoPeer) {
+	dh.g = big.NewInt(1)
+
+	alice := newEchoPeer(dh)
+	bob := newEchoPeer(dh)
+	eve := newEchoPeer(dh)
+
+	A := dh.genPublic(alice.private)
+	bob.initKey(dh, A)
+
+	B := dh.genPublic(bob.private)
+	alice.initKey(dh, B)
+
+	eve.key = deriveKey(big.NewInt(1))
+
+	return alice, eve, bob
+}
+
+func createMITMEchoBotGp(dh dhParams) (*echoPeer, *echoPeer, *echoPeer) {
+	dh.g = dh.p
+
+	alice := newEchoPeer(dh)
+	bob := newEchoPeer(dh)
+	eve := newEchoPeer(dh)
+
+	A := dh.genPublic(alice.private)
+	bob.initKey(dh, A)
+
+	B := dh.genPublic(bob.private)
+	alice.initKey(dh, B)
+
+	eve.key = deriveKey(big.NewInt(0))
+
+	return alice, eve, bob
+}
+
+func createMITMEchoBotGpm1(dh dhParams) (*echoPeer, *echoPeer, *echoPeer) {
+	dh.g = new(big.Int).Sub(dh.p, big.NewInt(1))
+
+	alice := newEchoPeer(dh)
+	bob := newEchoPeer(dh)
+	eve := newEchoPeer(dh)
+
+	A := dh.genPublic(alice.private)
+	bob.initKey(dh, A)
+
+	B := dh.genPublic(bob.private)
+	alice.initKey(dh, B)
+
+	eve.key = deriveKey(big.NewInt(1))
+
+	probe := []byte("test message")
+	encrypted := alice.encrypt(probe)
+	if eve.decrypt(encrypted) == nil {
+		eve.key = deriveKey(new(big.Int).Sub(p, big.NewInt(1)))
+	}
 
 	return alice, eve, bob
 }

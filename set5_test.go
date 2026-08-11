@@ -71,3 +71,86 @@ func TestChallenge34(t *testing.T) {
 		}
 	})
 }
+
+func TestChallenge35(t *testing.T) {
+	t.Run("g = 1", func(t *testing.T) {
+		g := big.NewInt(3)
+		dh := dhParams{g: g, p: p}
+		alice, eve, bob := createMITMEchoBotG1(dh)
+		msg := []byte("hello, cryptopals!")
+
+		aliceToBob := alice.encrypt(msg)
+		eveDecryptedToBob := eve.decrypt(aliceToBob)
+		if !bytes.Equal(eveDecryptedToBob, msg) {
+			t.Errorf("expected eve to decrypt %v, got %v", msg, eveDecryptedToBob)
+		}
+		bobDecrypted := bob.decrypt(aliceToBob)
+		if !bytes.Equal(bobDecrypted, msg) {
+			t.Errorf("expected bob to decrypt %v, got %v", msg, bobDecrypted)
+		}
+
+		bobToAlice := bob.encrypt(bobDecrypted)
+		eveDecryptedToAlice := eve.decrypt(bobToAlice)
+		if !bytes.Equal(eveDecryptedToAlice, msg) {
+			t.Errorf("expected eve to decrypt %v, got %v", msg, eveDecryptedToAlice)
+		}
+		aliceDecrypted := alice.decrypt(bobToAlice)
+		if !bytes.Equal(aliceDecrypted, msg) {
+			t.Errorf("expected alice to decrypt %v, got %v", msg, aliceDecrypted)
+		}
+	})
+
+	t.Run("g = p", func(t *testing.T) {
+		g := big.NewInt(3)
+		dh := dhParams{g: g, p: p}
+		alice, eve, bob := createMITMEchoBotGp(dh)
+		msg := []byte("hello, cryptopals!")
+
+		aliceToBob := alice.encrypt(msg)
+		eveDecryptedToBob := eve.decrypt(aliceToBob)
+		if !bytes.Equal(eveDecryptedToBob, msg) {
+			t.Errorf("expected eve to decrypt %v, got %v", msg, eveDecryptedToBob)
+		}
+		bobDecrypted := bob.decrypt(aliceToBob)
+		if !bytes.Equal(bobDecrypted, msg) {
+			t.Errorf("expected bob to decrypt %v, got %v", msg, bobDecrypted)
+		}
+
+		bobToAlice := bob.encrypt(bobDecrypted)
+		eveDecryptedToAlice := eve.decrypt(bobToAlice)
+		if !bytes.Equal(eveDecryptedToAlice, msg) {
+			t.Errorf("expected eve to decrypt %v, got %v", msg, eveDecryptedToAlice)
+		}
+		aliceDecrypted := alice.decrypt(bobToAlice)
+		if !bytes.Equal(aliceDecrypted, msg) {
+			t.Errorf("expected alice to decrypt %v, got %v", msg, aliceDecrypted)
+		}
+	})
+
+	t.Run("g = p-1", func(t *testing.T) {
+		g := big.NewInt(3)
+		dh := dhParams{g: g, p: p}
+		alice, eve, bob := createMITMEchoBotGpm1(dh)
+		msg := []byte("hello, cryptopals!")
+
+		aliceToBob := alice.encrypt(msg)
+		eveDecryptedToBob := eve.decrypt(aliceToBob)
+		if !bytes.Equal(eveDecryptedToBob, msg) {
+			t.Errorf("expected eve to decrypt %v, got %v", msg, eveDecryptedToBob)
+		}
+		bobDecrypted := bob.decrypt(aliceToBob)
+		if !bytes.Equal(bobDecrypted, msg) {
+			t.Errorf("expected bob to decrypt %v, got %v", msg, bobDecrypted)
+		}
+
+		bobToAlice := bob.encrypt(bobDecrypted)
+		eveDecryptedToAlice := eve.decrypt(bobToAlice)
+		if !bytes.Equal(eveDecryptedToAlice, msg) {
+			t.Errorf("expected eve to decrypt %v, got %v", msg, eveDecryptedToAlice)
+		}
+		aliceDecrypted := alice.decrypt(bobToAlice)
+		if !bytes.Equal(aliceDecrypted, msg) {
+			t.Errorf("expected alice to decrypt %v, got %v", msg, aliceDecrypted)
+		}
+	})
+}
