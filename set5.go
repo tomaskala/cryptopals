@@ -1,6 +1,7 @@
 package cryptopals
 
 import (
+	"crypto/aes"
 	"crypto/rand"
 	"math/big"
 )
@@ -26,4 +27,73 @@ func (dh dhParams) genPublic(private *big.Int) *big.Int {
 
 func (dh dhParams) genSecret(private, public *big.Int) *big.Int {
 	return new(big.Int).Exp(public, private, dh.p)
+}
+
+type echoPeer struct {
+	private *big.Int
+	key     []byte
+	iv      []byte
+}
+
+func newEchoPeer(dh dhParams) *echoPeer {
+	iv := make([]byte, aesBlockSize)
+	rand.Read(iv)
+	return &echoPeer{private: dh.genPrivate(), iv: iv}
+}
+
+func (p *echoPeer) deriveSecret(dh dhParams, public *big.Int) {
+	secret := dh.genSecret(p.private, public)
+	sha1 := newSHA1()
+	_, err := sha1.Write(secret.Bytes())
+	if err != nil {
+		panic(err)
+	}
+	digest := sha1.digest()
+	p.key = digest[:aesBlockSize]
+}
+
+func (p *echoPeer) encrypt(msg []byte) []byte {
+	block, err := aes.NewCipher(p.key)
+	if err != nil {
+		panic(err)
+	}
+	ciphertext := encryptCBC(p.iv, padPKCS7(msg, aesBlockSize), block)
+	return append(ciphertext, p.iv...)
+}
+
+func (p *echoPeer) decrypt(msg []byte) []byte {
+	block, err := aes.NewCipher(p.key)
+	if err != nil {
+		panic(err)
+	}
+	ciphertext, iv := msg[:len(msg)-aesBlockSize], msg[len(msg)-aesBlockSize:]
+	decrypted := decryptCBC(iv, ciphertext, block)
+	return unpadPKCS7(decrypted)
+}
+
+func createEchoBot(dh dhParams) (*echoPeer, *echoPeer) {
+	alice := newEchoPeer(dh)
+	bob := newEchoPeer(dh)
+
+	A := dh.genPublic(alice.private)
+	bob.deriveSecret(dh, A)
+
+	B := dh.genPublic(bob.private)
+	alice.deriveSecret(dh, B)
+
+	return alice, bob
+}
+
+func createMITMEchoBot(dh dhParams) (*echoPeer, *echoPeer, *echoPeer) {
+	alice := newEchoPeer(dh)
+	bob := newEchoPeer(dh)
+	eve := newEchoPeer(dh)
+
+	E := dh.p
+
+	bob.deriveSecret(dh, E)
+	eve.deriveSecret(dh, big.NewInt(0))
+	alice.deriveSecret(dh, E)
+
+	return alice, eve, bob
 }
