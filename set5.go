@@ -2,7 +2,10 @@ package cryptopals
 
 import (
 	"crypto/aes"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"math/big"
 )
 
@@ -160,4 +163,132 @@ func createMITMEchoBotGpm1(dh dhParams) (*echoPeer, *echoPeer, *echoPeer) {
 	}
 
 	return alice, eve, bob
+}
+
+var srpK = big.NewInt(3)
+
+type srpVerifier struct {
+	salt []byte
+	v    *big.Int
+}
+
+type srpSession struct {
+	email string
+	key   []byte
+	salt  []byte
+}
+
+type srpServer struct {
+	dh          dhParams
+	credentials map[string]srpVerifier
+	sessions    map[string]*srpSession
+}
+
+func newSRPServer(dh dhParams) *srpServer {
+	return &srpServer{
+		dh:          dh,
+		credentials: make(map[string]srpVerifier),
+		sessions:    make(map[string]*srpSession),
+	}
+}
+
+// register represents a POST /register endpoint.
+func (s *srpServer) register(email string, credentials srpVerifier) {
+	s.credentials[email] = credentials
+}
+
+// exchange represents a POST /sessions endpoint.
+func (s *srpServer) exchange(email string, A *big.Int) (string, []byte, *big.Int) {
+	user := s.credentials[email]
+	b := s.dh.genPrivate()
+
+	// B = (k*v + g^b) mod p
+	B := new(big.Int)
+	B.Mul(srpK, user.v)
+	B.Add(B, s.dh.genPublic(b))
+	B.Mod(B, s.dh.p)
+
+	uH := sha256.Sum256(append(A.Bytes(), B.Bytes()...))
+	u := new(big.Int).SetBytes(uH[:])
+
+	// S = (A * v^u)^b mod p
+	S := new(big.Int)
+	S.Exp(user.v, u, s.dh.p)
+	S.Mul(S, A)
+	S.Exp(S, b, s.dh.p)
+
+	K := sha256.Sum256(S.Bytes())
+
+	sid := make([]byte, 16)
+	rand.Read(sid)
+	sessionID := hex.EncodeToString(sid)
+	s.sessions[sessionID] = &srpSession{
+		email: email,
+		key:   K[:],
+		salt:  user.salt,
+	}
+
+	return sessionID, user.salt, B
+}
+
+// validate represents a POST /sessions/{id}/proof endpoint.
+func (s *srpServer) validate(sessionID string, mac []byte) bool {
+	session := s.sessions[sessionID]
+	h := hmac.New(sha256.New, session.key)
+	h.Write(session.salt)
+	return hmac.Equal(h.Sum(nil), mac)
+}
+
+type srpClient struct {
+	dh    dhParams
+	email string
+}
+
+func newSRPClient(dh dhParams, email string) *srpClient {
+	return &srpClient{dh: dh, email: email}
+}
+
+func (c *srpClient) deriveCredentials(password []byte) srpVerifier {
+	salt := make([]byte, 16)
+	rand.Read(salt)
+
+	xH := sha256.Sum256(append(salt, password...))
+	x := new(big.Int).SetBytes(xH[:])
+
+	// v = g^x mod p
+	v := new(big.Int).Exp(c.dh.g, x, c.dh.p)
+
+	return srpVerifier{salt: salt, v: v}
+}
+
+func (c *srpClient) login(server *srpServer, password []byte) bool {
+	a := c.dh.genPrivate()
+	A := c.dh.genPublic(a)
+	sessionID, salt, B := server.exchange(c.email, A)
+
+	uH := sha256.Sum256(append(A.Bytes(), B.Bytes()...))
+	u := new(big.Int).SetBytes(uH[:])
+
+	xH := sha256.Sum256(append(salt, password...))
+	x := new(big.Int).SetBytes(xH[:])
+
+	// exp = (a + u*x) mod p
+	exp := new(big.Int)
+	exp.Mul(u, x)
+	exp.Add(exp, a)
+	exp.Mod(exp, c.dh.p)
+
+	// S = (B - k*g^x)^exp mod p
+	S := new(big.Int)
+	S.Exp(c.dh.g, x, c.dh.p)
+	S.Mul(srpK, S)
+	S.Sub(B, S)
+	S.Exp(S, exp, c.dh.p)
+
+	K := sha256.Sum256(S.Bytes())
+	h := hmac.New(sha256.New, K[:])
+	h.Write(salt)
+	mac := h.Sum(nil)
+
+	return server.validate(sessionID, mac)
 }

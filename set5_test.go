@@ -154,3 +154,18 @@ func TestChallenge35(t *testing.T) {
 		}
 	})
 }
+
+func TestChallenge36(t *testing.T) {
+	g := big.NewInt(2)
+	dh := dhParams{g: g, p: p}
+	email := "test@example.com"
+	password := []byte("secret password")
+
+	server := newSRPServer(dh)
+	client := newSRPClient(dh, email)
+	server.register(email, client.deriveCredentials(password))
+
+	if !client.login(server, password) {
+		t.Errorf("client did not login successfully")
+	}
+}
