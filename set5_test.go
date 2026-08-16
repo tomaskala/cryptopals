@@ -169,3 +169,18 @@ func TestChallenge36(t *testing.T) {
 		t.Errorf("client did not login successfully")
 	}
 }
+
+func TestChallenge37(t *testing.T) {
+	g := big.NewInt(2)
+	dh := dhParams{g: g, p: p}
+	email := "test@example.com"
+	password := []byte("secret password")
+
+	server := newSRPServer(dh)
+	realClient := newSRPClient(dh, email)
+	server.register(email, realClient.deriveCredentials(password))
+
+	if !bypassLogin(email, server) {
+		t.Errorf("client did not bypass the login successfully")
+	}
+}

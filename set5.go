@@ -292,3 +292,15 @@ func (c *srpClient) login(server *srpServer, password []byte) bool {
 
 	return server.validate(sessionID, mac)
 }
+
+func bypassLogin(email string, server *srpServer) bool {
+	A := big.NewInt(0)
+	sessionID, salt, _ := server.exchange(email, A)
+
+	K := sha256.Sum256(nil)
+	h := hmac.New(sha256.New, K[:])
+	h.Write(salt)
+	mac := h.Sum(nil)
+
+	return server.validate(sessionID, mac)
+}
