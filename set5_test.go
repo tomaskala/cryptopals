@@ -161,11 +161,11 @@ func TestChallenge36(t *testing.T) {
 	email := "test@example.com"
 	password := []byte("secret password")
 
-	server := newSRPServer(dh)
-	client := newSRPClient(dh, email)
-	server.register(email, client.deriveCredentials(password))
+	server := newRealSRPServer(dh)
+	client := newRealSRPClient(dh, email, password)
+	server.register(email, deriveCredentials(dh, password))
 
-	if !client.login(server, password) {
+	if !client.login(server) {
 		t.Errorf("client did not login successfully")
 	}
 }
@@ -176,11 +176,43 @@ func TestChallenge37(t *testing.T) {
 	email := "test@example.com"
 	password := []byte("secret password")
 
-	server := newSRPServer(dh)
-	realClient := newSRPClient(dh, email)
-	server.register(email, realClient.deriveCredentials(password))
+	server := newRealSRPServer(dh)
+	server.register(email, deriveCredentials(dh, password))
 
 	if !bypassLogin(email, server) {
 		t.Errorf("client did not bypass the login successfully")
 	}
+}
+
+func TestChallenge38(t *testing.T) {
+	g := big.NewInt(2)
+	dh := dhParams{g: g, p: p}
+	email := "test@example.com"
+	password := []byte("secret password")
+
+	t.Run("simplified server", func(t *testing.T) {
+		server := newSimplifiedSRPServer(dh)
+		client := newSimplifiedSRPClient(dh, email, password)
+		server.register(email, deriveCredentials(dh, password))
+
+		if !client.login(server) {
+			t.Errorf("client did not login successfully to a simplified server")
+		}
+	})
+
+	t.Run("MITM server", func(t *testing.T) {
+		server := newMITMSRPServer(dh)
+		client := newSimplifiedSRPClient(dh, email, password)
+		server.register(email, deriveCredentials(dh, password))
+
+		if !client.login(server) {
+			t.Errorf("client did not login successfully to a MITM server")
+		}
+		if server.tryPassword([]byte("incorrect password")) {
+			t.Errorf("MITM server cracked a wrong password")
+		}
+		if !server.tryPassword(password) {
+			t.Errorf("MITM server did not crack the correct password")
+		}
+	})
 }
