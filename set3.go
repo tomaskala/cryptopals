@@ -197,12 +197,12 @@ const (
 )
 
 func generateFromTimeSeed() uint32 {
-	sleep := minSleep + mathrand.Int64N(maxSleep-minSleep+1)
+	sleep := minSleep + mathrand.N(maxSleep-minSleep+1)
 	time.Sleep(time.Duration(sleep) * time.Millisecond)
 
 	seed := time.Now().UnixMilli()
 
-	sleep = minSleep + mathrand.Int64N(maxSleep-minSleep+1)
+	sleep = minSleep + mathrand.N(maxSleep-minSleep+1)
 	time.Sleep(time.Duration(sleep) * time.Millisecond)
 
 	return newMT19937(uint32(seed)).generate()
@@ -270,7 +270,7 @@ func newMT19937EncryptionOracle() func([]byte) []byte {
 	rand.Read(key[:])
 	seed := binary.LittleEndian.Uint16(key[:])
 
-	prefixLength := 10 + mathrand.IntN(40)
+	prefixLength := 10 + mathrand.N(40)
 	prefix := make([]byte, prefixLength)
 	rand.Read(prefix)
 

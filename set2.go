@@ -81,10 +81,10 @@ func newECBCBCOracle() func([]byte) []byte {
 	}
 
 	return func(bs []byte) []byte {
-		prefix := make([]byte, 5+mathrand.IntN(6))
+		prefix := make([]byte, 5+mathrand.N(6))
 		rand.Read(prefix)
 
-		suffix := make([]byte, 5+mathrand.IntN(6))
+		suffix := make([]byte, 5+mathrand.N(6))
 		rand.Read(suffix)
 
 		buf := padPKCS7(append(append(prefix, bs...), suffix...), aesBlockSize)
@@ -208,7 +208,7 @@ func newECBPrefixSuffixOracle(suffix []byte) func([]byte) []byte {
 		panic(err)
 	}
 
-	prefixLen := mathrand.IntN(500)
+	prefixLen := mathrand.N(500)
 	prefix := make([]byte, prefixLen)
 	rand.Read(prefix)
 

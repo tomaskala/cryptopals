@@ -329,7 +329,7 @@ func newKeyedSHA1CookieOracle() (
 	cookie []byte,
 	isAdmin func([]byte) bool,
 ) {
-	key := make([]byte, 2+mathrand.IntN(100-1))
+	key := make([]byte, 2+mathrand.N(100-1))
 	rand.Read(key)
 
 	msg := []byte("comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon")
@@ -569,7 +569,7 @@ func newKeyedMD4CookieOracle() (
 	cookie []byte,
 	isAdmin func([]byte) bool,
 ) {
-	key := make([]byte, 2+mathrand.IntN(100-1))
+	key := make([]byte, 2+mathrand.N(100-1))
 	rand.Read(key)
 
 	msg := []byte("comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon")
