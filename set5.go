@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"math/big"
@@ -462,4 +463,54 @@ func (s *srpMITMServer) tryPassword(password []byte) bool {
 	h.Write(s.salt)
 
 	return hmac.Equal(h.Sum(nil), s.capturedMAC)
+}
+
+func rsaGenerate(bits int) *rsa.PrivateKey {
+	const e = 3
+	bigE := big.NewInt(e)
+	big1 := big.NewInt(1)
+
+	genPrime := func() (*big.Int, *big.Int) {
+		for {
+			p, err := rand.Prime(rand.Reader, bits)
+			if err != nil {
+				panic(err)
+			}
+			pm1 := new(big.Int).Sub(p, big1)
+			if new(big.Int).GCD(nil, nil, pm1, bigE).Cmp(big1) == 0 {
+				return p, pm1
+			}
+		}
+	}
+
+	p, pm1 := genPrime()
+	q, qm1 := genPrime()
+	n := new(big.Int).Mul(p, q)
+	et := new(big.Int).Mul(pm1, qm1)
+	d := new(big.Int).ModInverse(bigE, et)
+
+	return &rsa.PrivateKey{
+		N:      n,
+		E:      e,
+		D:      d,
+		Primes: []*big.Int{p, q},
+	}
+}
+
+func rsaEncrypt(msg []byte, key *rsa.PublicKey) []byte {
+	m := new(big.Int).SetBytes(msg)
+	if m.Cmp(key.N) >= 0 {
+		panic("message too large")
+	}
+	c := new(big.Int).Exp(m, big.NewInt(int64(key.E)), key.N)
+	return c.Bytes()
+}
+
+func rsaDecrypt(msg []byte, key *rsa.PrivateKey) []byte {
+	m := new(big.Int).SetBytes(msg)
+	if m.Cmp(key.N) >= 0 {
+		panic("message too large")
+	}
+	d := new(big.Int).Exp(m, key.D, key.N)
+	return d.Bytes()
 }

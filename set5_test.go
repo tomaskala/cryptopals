@@ -216,3 +216,13 @@ func TestChallenge38(t *testing.T) {
 		}
 	})
 }
+
+func TestChallenge39(t *testing.T) {
+	msg := []byte("hello, cryptopals!")
+	key := rsaGenerate(1024)
+	ciphertext := rsaEncrypt(msg, &key.PublicKey)
+	plaintext := rsaDecrypt(ciphertext, key)
+	if !bytes.Equal(plaintext, msg) {
+		t.Errorf("expected %v, got %v", msg, plaintext)
+	}
+}
