@@ -2,6 +2,7 @@ package cryptopals
 
 import (
 	"bytes"
+	"crypto/rsa"
 	"math/big"
 	"testing"
 )
@@ -224,5 +225,25 @@ func TestChallenge39(t *testing.T) {
 	plaintext := rsaDecrypt(ciphertext, key)
 	if !bytes.Equal(plaintext, msg) {
 		t.Errorf("expected %v, got %v", msg, plaintext)
+	}
+}
+
+func TestChallenge40(t *testing.T) {
+	msg := []byte("hello, cryptopals!")
+
+	key := [...]*rsa.PublicKey{
+		&rsaGenerate(1024).PublicKey,
+		&rsaGenerate(1024).PublicKey,
+		&rsaGenerate(1024).PublicKey,
+	}
+	c := [...]*big.Int{
+		new(big.Int).SetBytes(rsaEncrypt(msg, key[0])),
+		new(big.Int).SetBytes(rsaEncrypt(msg, key[1])),
+		new(big.Int).SetBytes(rsaEncrypt(msg, key[2])),
+	}
+
+	plaintext := rsaBroadcastAttack(c, key).Bytes()
+	if !bytes.Equal(plaintext, msg) {
+		t.Errorf("expected: %v, got %v", msg, plaintext)
 	}
 }

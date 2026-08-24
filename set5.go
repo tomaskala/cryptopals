@@ -497,8 +497,8 @@ func rsaGenerate(bits int) *rsa.PrivateKey {
 	}
 }
 
-func rsaEncrypt(msg []byte, key *rsa.PublicKey) []byte {
-	m := new(big.Int).SetBytes(msg)
+func rsaEncrypt(plaintext []byte, key *rsa.PublicKey) []byte {
+	m := new(big.Int).SetBytes(plaintext)
 	if m.Cmp(key.N) >= 0 {
 		panic("message too large")
 	}
@@ -506,11 +506,78 @@ func rsaEncrypt(msg []byte, key *rsa.PublicKey) []byte {
 	return c.Bytes()
 }
 
-func rsaDecrypt(msg []byte, key *rsa.PrivateKey) []byte {
-	m := new(big.Int).SetBytes(msg)
+func rsaDecrypt(ciphertext []byte, key *rsa.PrivateKey) []byte {
+	m := new(big.Int).SetBytes(ciphertext)
 	if m.Cmp(key.N) >= 0 {
 		panic("message too large")
 	}
 	d := new(big.Int).Exp(m, key.D, key.N)
 	return d.Bytes()
+}
+
+func rsaBroadcastAttack(c [3]*big.Int, key [3]*rsa.PublicKey) *big.Int {
+	for i := range len(key) {
+		if key[i].E != 3 {
+			panic("can only break E=3 public keys")
+		}
+	}
+
+	for i := range len(key) {
+		for j := range len(key) {
+			if i == j {
+				continue
+			}
+
+			gcd := new(big.Int).GCD(nil, nil, key[i].N, key[j].N)
+			if gcd.Cmp(big.NewInt(1)) != 0 {
+				panic("public key moduli are not pairwise coprime")
+			}
+		}
+	}
+
+	m := [...]*big.Int{
+		new(big.Int).Mul(key[1].N, key[2].N),
+		new(big.Int).Mul(key[0].N, key[2].N),
+		new(big.Int).Mul(key[0].N, key[1].N),
+	}
+
+	n := big.NewInt(1)
+	n.Mul(n, key[0].N)
+	n.Mul(n, key[1].N)
+	n.Mul(n, key[2].N)
+
+	mCubed := new(big.Int)
+	for i := range len(c) {
+		term := big.NewInt(1)
+		term.Mul(term, c[i])
+		term.Mul(term, m[i])
+		term.Mul(term, new(big.Int).ModInverse(m[i], key[i].N))
+		mCubed.Add(mCubed, term)
+	}
+	mCubed.Mod(mCubed, n)
+
+	return integerCubeRoot(mCubed)
+}
+
+func integerCubeRoot(n *big.Int) *big.Int {
+	low := big.NewInt(0)
+	high := new(big.Int).Set(n)
+	big1 := big.NewInt(1)
+	big2 := big.NewInt(2)
+
+	for low.Cmp(high) < 0 {
+		mid := new(big.Int).Add(low, high)
+		mid.Div(mid, big2)
+
+		cube := new(big.Int).Mul(mid, mid)
+		cube.Mul(cube, mid)
+
+		if cube.Cmp(n) < 0 {
+			low.Add(mid, big1)
+		} else {
+			high.Set(mid)
+		}
+	}
+
+	return low
 }
