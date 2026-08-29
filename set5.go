@@ -470,7 +470,7 @@ func rsaGenerate(bits int) *rsa.PrivateKey {
 
 	genPrime := func() (*big.Int, *big.Int) {
 		for {
-			p, err := rand.Prime(rand.Reader, bits)
+			p, err := rand.Prime(rand.Reader, bits/2)
 			if err != nil {
 				panic(err)
 			}
