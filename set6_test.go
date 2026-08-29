@@ -24,3 +24,13 @@ func TestChallenge41(t *testing.T) {
 		t.Errorf("expected %v, got %v", msg, decrypted)
 	}
 }
+
+func TestChallenge42(t *testing.T) {
+	msg := []byte("hi mom")
+	keySizeBits := 2048
+	verify := newRSASignatureOracle(keySizeBits)
+	sig := forgeRSASignature(msg, keySizeBits)
+	if !verify(msg, sig) {
+		t.Error("signature not valid")
+	}
+}
