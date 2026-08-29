@@ -2,6 +2,7 @@ package cryptopals
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -126,4 +127,143 @@ func forgeRSASignature(msg []byte, keySizeBits int) []byte {
 
 	sig := new(big.Int).SetBytes(s)
 	return integerCubeRoot(sig).Bytes()
+}
+
+type dsaParameters struct {
+	p *big.Int
+	q *big.Int
+	g *big.Int
+}
+
+func mustSetHexString(s string) *big.Int {
+	num, ok := new(big.Int).SetString(s, 16)
+	if !ok {
+		panic("cannot set string")
+	}
+	return num
+}
+
+var cryptopalsDSAParams = dsaParameters{
+	p: mustSetHexString("800000000000000089e1855218a0e7dac38136ffafa72eda7859f2171e25e65eac698c1702578b07dc2a1076da241c76c62d374d8389ea5aeffd3226a0530cc565f3bf6b50929139ebeac04f48c3c84afb796d61e5a4f9a8fda812ab59494232c7d2b4deb50aa18ee9e132bfa85ac4374d7f9091abc3d015efc871a584471bb1"),
+	q: mustSetHexString("f4f47f05794b256174bba6e9b396a7707e563c5b"),
+	g: mustSetHexString("5958c9d3898b224b12672c0b98e06c60df923cb8bc999d119458fef538b8fa4046c8db53039db620c094c9fa077ef389b5322a559946a71903f990f1f7e0e025e2d7f7cf494aff1a0470f5b64c36b625a097f1651fe775323556fe00b3608c887892878480e99041be601a62166ca6894bdd41a7054ec89f756ba9fc95302291"),
+}
+
+func (dsa dsaParameters) generate() (*big.Int, *big.Int) {
+	big1 := big.NewInt(1)
+	x, err := rand.Int(rand.Reader, new(big.Int).Sub(dsa.q, big1))
+	if err != nil {
+		panic(err)
+	}
+	x.Add(x, big1)
+	y := new(big.Int).Exp(dsa.g, x, dsa.p)
+	return x, y
+}
+
+func (dsa dsaParameters) sign(x *big.Int, msg []byte) (*big.Int, *big.Int) {
+	big0 := big.NewInt(0)
+	big1 := big.NewInt(1)
+
+	for {
+		k, err := rand.Int(rand.Reader, new(big.Int).Sub(dsa.q, big1))
+		if err != nil {
+			panic(err)
+		}
+
+		r := new(big.Int).Exp(dsa.g, k, dsa.p)
+		r.Mod(r, dsa.q)
+		if r.Cmp(big0) == 0 {
+			continue
+		}
+
+		digest := sha1.Sum(msg)
+		h := new(big.Int).SetBytes(digest[:])
+		kInv := new(big.Int).ModInverse(k, dsa.q)
+
+		s := new(big.Int).Mul(x, r)
+		s.Add(s, h)
+		s.Mul(s, kInv)
+		s.Mod(s, dsa.q)
+		if s.Cmp(big0) == 0 {
+			continue
+		}
+		return r, s
+	}
+}
+
+func (dsa dsaParameters) verify(y, r, s *big.Int, msg []byte) bool {
+	big0 := big.NewInt(0)
+	if r.Cmp(big0) < 0 || r.Cmp(dsa.q) >= 0 {
+		return false
+	}
+	if s.Cmp(big0) < 0 || s.Cmp(dsa.q) >= 0 {
+		return false
+	}
+
+	w := new(big.Int).ModInverse(s, dsa.q)
+	digest := sha1.Sum(msg)
+	h := new(big.Int).SetBytes(digest[:])
+
+	u1 := new(big.Int).Mul(h, w)
+	u1.Mod(u1, dsa.q)
+
+	u2 := new(big.Int).Mul(r, w)
+	u2.Mod(u2, dsa.q)
+
+	exp1 := new(big.Int).Exp(dsa.g, u1, dsa.p)
+	exp2 := new(big.Int).Exp(y, u2, dsa.p)
+	v := new(big.Int).Mul(exp1, exp2)
+	v.Mod(v, dsa.p)
+	v.Mod(v, dsa.q)
+
+	return v.Cmp(r) == 0
+}
+
+func recoverDSAPrivateKeyFromSmallNonce(dsa dsaParameters, y, r, s *big.Int, msg []byte) *big.Int {
+	digest := sha1.Sum(msg)
+	h := new(big.Int).SetBytes(digest[:])
+	rInv := new(big.Int).ModInverse(r, dsa.q)
+	calculatePrivateKey := func(k *big.Int) *big.Int {
+		x := new(big.Int).Mul(s, k)
+		x.Sub(x, h)
+		x.Mul(x, rInv)
+		x.Mod(x, dsa.q)
+		return x
+	}
+
+	// A slower method that calculates a candidate private key for each possible k,
+	// uses it to calculate a public key, and compares it with the known public key.
+	/*
+		k := big.NewInt(0)
+		big1 := big.NewInt(1)
+
+		for k.BitLen() <= 16 {
+			possibleX := calculatePrivateKey(k)
+			possibleY := new(big.Int).Exp(dsa.g, possibleX, dsa.p)
+			if possibleY.Cmp(y) == 0 {
+				return possibleX
+			}
+			k.Add(k, big1)
+		}
+	*/
+
+	// A faster method that calculates a candidate r parameter for each possible k,
+	// compares it with the known parameter r, and calculates a private key from the
+	// k for which r matched.
+	k := big.NewInt(0)
+	big1 := big.NewInt(1)
+	possibleRTerm := big.NewInt(1)
+	possibleR := big.NewInt(1)
+
+	for k.BitLen() <= 16 {
+		if possibleR.Cmp(r) == 0 {
+			return calculatePrivateKey(k)
+		}
+		possibleRTerm.Mul(possibleRTerm, dsa.g)
+		possibleRTerm.Mod(possibleRTerm, dsa.p)
+		possibleR.Mod(possibleRTerm, dsa.q)
+		k.Add(k, big1)
+	}
+
+	return nil
 }
