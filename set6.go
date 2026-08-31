@@ -283,3 +283,16 @@ func recoverDSAPrivateKeyFromRepeatedNonce(dsa dsaParameters, r, s1, s2 *big.Int
 
 	return calculatePrivateKey(dsa.q, h1, r, s1, k)
 }
+
+func magicDSASignatureForG1(p, q, y *big.Int) (*big.Int, *big.Int) {
+	z := big.NewInt(1337)
+	zInv := new(big.Int).ModInverse(z, q)
+
+	r := new(big.Int).Exp(y, z, p)
+	r.Mod(r, q)
+
+	s := new(big.Int).Mul(r, zInv)
+	s.Mod(s, q)
+
+	return r, s
+}

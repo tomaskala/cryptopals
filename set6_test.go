@@ -99,6 +99,27 @@ func TestChallenge44(t *testing.T) {
 	}
 }
 
+func TestChallenge45(t *testing.T) {
+	_, y := cryptopalsDSAParams.generate()
+
+	hijackedDSAParams := dsaParameters{
+		p: cryptopalsDSAParams.p,
+		q: cryptopalsDSAParams.q,
+		g: new(big.Int).Add(cryptopalsDSAParams.p, big.NewInt(1)),
+	}
+	r, s := magicDSASignatureForG1(cryptopalsDSAParams.p, cryptopalsDSAParams.q, y)
+
+	msg1 := []byte("Hello, world")
+	if !hijackedDSAParams.verify(y, r, s, msg1) {
+		t.Errorf("msg1 verification failed")
+	}
+
+	msg2 := []byte("Goodbye, world")
+	if !hijackedDSAParams.verify(y, r, s, msg2) {
+		t.Errorf("msg2 verification failed")
+	}
+}
+
 func decToBig(t *testing.T, s string) *big.Int {
 	t.Helper()
 	b, ok := new(big.Int).SetString(s, 10)
