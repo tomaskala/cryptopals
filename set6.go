@@ -219,17 +219,18 @@ func (dsa dsaParameters) verify(y, r, s *big.Int, msg []byte) bool {
 	return v.Cmp(r) == 0
 }
 
+func calculatePrivateKey(q, h, r, s, k *big.Int) *big.Int {
+	rInv := new(big.Int).ModInverse(r, q)
+	x := new(big.Int).Mul(s, k)
+	x.Sub(x, h)
+	x.Mul(x, rInv)
+	x.Mod(x, q)
+	return x
+}
+
 func recoverDSAPrivateKeyFromSmallNonce(dsa dsaParameters, y, r, s *big.Int, msg []byte) *big.Int {
 	digest := sha1.Sum(msg)
 	h := new(big.Int).SetBytes(digest[:])
-	rInv := new(big.Int).ModInverse(r, dsa.q)
-	calculatePrivateKey := func(k *big.Int) *big.Int {
-		x := new(big.Int).Mul(s, k)
-		x.Sub(x, h)
-		x.Mul(x, rInv)
-		x.Mod(x, dsa.q)
-		return x
-	}
 
 	// A slower method that calculates a candidate private key for each possible k,
 	// uses it to calculate a public key, and compares it with the known public key.
@@ -238,7 +239,7 @@ func recoverDSAPrivateKeyFromSmallNonce(dsa dsaParameters, y, r, s *big.Int, msg
 		big1 := big.NewInt(1)
 
 		for k.BitLen() <= 16 {
-			possibleX := calculatePrivateKey(k)
+			possibleX := calculatePrivateKey(dsa.q, h, r, s, k)
 			possibleY := new(big.Int).Exp(dsa.g, possibleX, dsa.p)
 			if possibleY.Cmp(y) == 0 {
 				return possibleX
@@ -257,7 +258,7 @@ func recoverDSAPrivateKeyFromSmallNonce(dsa dsaParameters, y, r, s *big.Int, msg
 
 	for k.BitLen() <= 16 {
 		if possibleR.Cmp(r) == 0 {
-			return calculatePrivateKey(k)
+			return calculatePrivateKey(dsa.q, h, r, s, k)
 		}
 		possibleRTerm.Mul(possibleRTerm, dsa.g)
 		possibleRTerm.Mod(possibleRTerm, dsa.p)
@@ -266,4 +267,19 @@ func recoverDSAPrivateKeyFromSmallNonce(dsa dsaParameters, y, r, s *big.Int, msg
 	}
 
 	return nil
+}
+
+func recoverDSAPrivateKeyFromRepeatedNonce(dsa dsaParameters, r, s1, s2 *big.Int, msg1, msg2 []byte) *big.Int {
+	digest1 := sha1.Sum(msg1)
+	h1 := new(big.Int).SetBytes(digest1[:])
+
+	digest2 := sha1.Sum(msg2)
+	h2 := new(big.Int).SetBytes(digest2[:])
+
+	hDiff := new(big.Int).Sub(h1, h2)
+	sDiff := new(big.Int).Sub(s1, s2)
+	sDiffInv := new(big.Int).ModInverse(sDiff, dsa.q)
+	k := new(big.Int).Mul(hDiff, sDiffInv)
+
+	return calculatePrivateKey(dsa.q, h1, r, s1, k)
 }
