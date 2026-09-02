@@ -296,3 +296,54 @@ func magicDSASignatureForG1(p, q, y *big.Int) (*big.Int, *big.Int) {
 
 	return r, s
 }
+
+func newRSAParityOracle(bits int) (
+	pub *rsa.PublicKey,
+	encrypt func([]byte) []byte,
+	isPlaintextEven func([]byte) bool,
+) {
+	key := rsaGenerate(bits)
+	big0 := big.NewInt(0)
+	big2 := big.NewInt(2)
+
+	pub = &key.PublicKey
+	encrypt = func(plaintext []byte) []byte {
+		return rsaEncrypt(plaintext, pub)
+	}
+	isPlaintextEven = func(ciphertext []byte) bool {
+		plaintext := rsaDecrypt(ciphertext, key)
+		n := new(big.Int).SetBytes(plaintext)
+		parity := n.Mod(n, big2)
+		return parity.Cmp(big0) == 0
+	}
+	return
+}
+
+func breakRSAParityOracle(pub *rsa.PublicKey, ciphertext []byte, isPlaintextEven func([]byte) bool) []byte {
+	big2 := big.NewInt(2)
+	bigE := big.NewInt(int64(pub.E))
+	enc2 := new(big.Int).Exp(big2, bigE, pub.N)
+
+	c := new(big.Int).SetBytes(ciphertext)
+
+	low := new(big.Rat).SetInt64(0)
+	high := new(big.Rat).SetInt(pub.N)
+	two := new(big.Rat).SetInt64(2)
+
+	for range pub.N.BitLen() {
+		c.Mul(c, enc2)
+		c.Mod(c, pub.N)
+
+		mid := new(big.Rat).Add(low, high)
+		mid.Quo(mid, two)
+
+		if isPlaintextEven(c.Bytes()) {
+			high.Set(mid)
+		} else {
+			low.Set(mid)
+		}
+	}
+
+	result := new(big.Int).Div(high.Num(), high.Denom())
+	return result.Bytes()
+}

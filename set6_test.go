@@ -120,6 +120,17 @@ func TestChallenge45(t *testing.T) {
 	}
 }
 
+func TestChallenge46(t *testing.T) {
+	pub, encrypt, isPlaintextEven := newRSAParityOracle(1024)
+	msg := base64Decode(t, "VGhhdCdzIHdoeSBJIGZvdW5kIHlvdSBkb24ndCBwbGF5IGFyb3VuZCB3aXRoIHRoZSBGdW5reSBDb2xkIE1lZGluYQ==")
+	ciphertext := encrypt(msg)
+	plaintext := breakRSAParityOracle(pub, ciphertext, isPlaintextEven)
+
+	if !bytes.Equal(plaintext, msg) {
+		t.Errorf("expected plaintext: %v, got: %v", msg, plaintext)
+	}
+}
+
 func decToBig(t *testing.T, s string) *big.Int {
 	t.Helper()
 	b, ok := new(big.Int).SetString(s, 10)
