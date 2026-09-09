@@ -347,3 +347,232 @@ func breakRSAParityOracle(pub *rsa.PublicKey, ciphertext []byte, isPlaintextEven
 	result := new(big.Int).Div(high.Num(), high.Denom())
 	return result.Bytes()
 }
+
+const rsaPaddingPrefixMinLength = 11
+
+func padRSA(pub *rsa.PublicKey, msg []byte) []byte {
+	buf := make([]byte, (pub.N.BitLen()+8-1)/8)
+	if len(buf) < rsaPaddingPrefixMinLength {
+		panic("public key too short")
+	}
+
+	msgStart := len(buf) - len(msg)
+	if msgStart < rsaPaddingPrefixMinLength {
+		panic("message too long")
+	}
+
+	// Insert header.
+	buf[0] = 0x00
+	buf[1] = 0x02
+
+	// Insert padding.
+	for i := 2; i < msgStart-1; i++ {
+		buf[i] = 0x01
+	}
+
+	// Insert separator.
+	buf[msgStart-1] = 0x00
+
+	// Insert message.
+	copy(buf[msgStart:], msg)
+
+	return buf
+}
+
+func unpadRSA(pub *rsa.PublicKey, plaintext []byte) []byte {
+	buf := make([]byte, (pub.N.BitLen()+8-1)/8)
+	copy(buf[len(buf)-len(plaintext):], plaintext)
+
+	if len(buf) < rsaPaddingPrefixMinLength {
+		return nil
+	}
+	if buf[0] != 0x00 {
+		return nil
+	}
+	if buf[1] != 0x02 {
+		return nil
+	}
+	for i := 2; i < 10; i++ {
+		if buf[i] == 0x00 {
+			return nil
+		}
+	}
+	for i := 10; i < len(buf); i++ {
+		if buf[i] == 0x00 {
+			return buf[i+1:]
+		}
+	}
+	return nil
+}
+
+func newRSAPaddingOracle(bits int) (
+	pub *rsa.PublicKey,
+	encrypt func([]byte) []byte,
+	isPaddingValid func([]byte) bool,
+) {
+	key := rsaGenerate(bits)
+
+	pub = &key.PublicKey
+	encrypt = func(plaintext []byte) []byte {
+		return rsaEncrypt(padRSA(pub, plaintext), pub)
+	}
+	isPaddingValid = func(ciphertext []byte) bool {
+		plaintext := rsaDecrypt(ciphertext, key)
+		return unpadRSA(pub, plaintext) != nil
+	}
+	return
+}
+
+type interval struct {
+	low  *big.Int
+	high *big.Int
+}
+
+func (i interval) isSinglePoint() bool {
+	return i.low.Cmp(i.high) == 0
+}
+
+func div(z, x, y *big.Int) *big.Int {
+	m := new(big.Int)
+	z.DivMod(x, y, m)
+	if m.Sign() > 0 {
+		z.Add(z, big.NewInt(1))
+	}
+	return z
+}
+
+func bigMin(a, b *big.Int) *big.Int {
+	if a.Cmp(b) < 0 {
+		return a
+	}
+	return b
+}
+
+func bigMax(a, b *big.Int) *big.Int {
+	if a.Cmp(b) > 0 {
+		return a
+	}
+	return b
+}
+
+func breakRSAPaddingOracle(pub *rsa.PublicKey, ciphertext []byte, isPaddingValid func([]byte) bool) []byte {
+	if !isPaddingValid(ciphertext) {
+		panic("must start from a valid ciphertext")
+	}
+	if pub.N.BitLen()%8 != 0 {
+		panic("key length must be a multiple of 8")
+	}
+
+	big1 := big.NewInt(1)
+	big2 := big.NewInt(2)
+	big3 := big.NewInt(3)
+	bigE := big.NewInt(int64(pub.E))
+
+	c := new(big.Int).SetBytes(ciphertext)               // Ciphertext represented as a number.
+	B := new(big.Int).Lsh(big1, uint(pub.N.BitLen())-16) // Bit length of the message without the header.
+	B2 := new(big.Int).Mul(B, big2)                      // Lower bound on m*s mod N, m being the plaintext message.
+	B3 := new(big.Int).Mul(B, big3)                      // Uppwer bound on m*s mod N.
+	M := []interval{{B2, new(big.Int).Sub(B3, big1)}}    // Set of intervals such that m is in one of them.
+	s := new(big.Int)                                    // Ciphertext multiplier to make the padding valid.
+
+	tryS := func(s *big.Int) bool {
+		probe := new(big.Int).Exp(s, bigE, pub.N)
+		probe.Mul(probe, c)
+		probe.Mod(probe, pub.N)
+		return isPaddingValid(probe.Bytes())
+	}
+
+	newIntervals := func(m []interval) []interval {
+		var newM []interval
+		for _, i := range m {
+			a, b := i.low, i.high
+
+			minR := new(big.Int).Mul(a, s)
+			minR.Sub(minR, B3)
+			minR.Add(minR, big1)
+			div(minR, minR, pub.N)
+
+			maxR := new(big.Int).Mul(b, s)
+			maxR.Sub(maxR, B2)
+			maxR.Div(maxR, pub.N)
+
+			r := new(big.Int).Set(minR)
+			for r.Cmp(maxR) <= 0 {
+				low := new(big.Int).Mul(r, pub.N)
+				low.Add(low, B2)
+				div(low, low, s)
+
+				high := new(big.Int).Mul(r, pub.N)
+				high.Add(high, B3)
+				high.Sub(high, big1)
+				high.Div(high, s)
+
+				newM = append(newM, interval{
+					low:  bigMax(a, low),
+					high: bigMin(b, high),
+				})
+
+				r.Add(r, big1)
+			}
+		}
+		return newM
+	}
+
+	// Step 1 skipped, we start with a valid ciphertext.
+	for i := 1; ; i++ {
+		// Step 2
+		if i == 1 {
+			// Step 2.a
+			div(s, pub.N, B3)
+			for !tryS(s) {
+				s.Add(s, big1)
+			}
+		} else if len(M) >= 2 {
+			// Step 2.b
+			s.Add(s, big1)
+			for !tryS(s) {
+				s.Add(s, big1)
+			}
+		} else {
+			// Step 2.c
+			a, b := M[0].low, M[0].high
+			r := new(big.Int).Mul(b, s)
+			r.Sub(r, B2)
+			r.Mul(r, big2)
+			div(r, r, pub.N)
+
+		outer:
+			for {
+				s = new(big.Int).Mul(r, pub.N)
+				s.Add(s, B2)
+				div(s, s, b)
+
+				maxS := new(big.Int).Mul(r, pub.N)
+				maxS.Add(maxS, B3)
+				div(maxS, maxS, a)
+
+				for {
+					if s.Cmp(maxS) >= 0 {
+						break
+					}
+
+					if tryS(s) {
+						break outer
+					}
+
+					s.Add(s, big1)
+				}
+
+				r.Add(r, big1)
+			}
+		}
+
+		// Step 3
+		M = newIntervals(M)
+
+		// Step 4
+		if len(M) == 1 && M[0].isSinglePoint() {
+			return unpadRSA(pub, M[0].low.Bytes())
+		}
+	}
+}
