@@ -150,6 +150,25 @@ func TestChallenge47(t *testing.T) {
 	}
 }
 
+func TestChallenge48(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+
+	msg := []byte("hello, cryptopals!")
+	pub, encrypt, isPaddingValid := newRSAPaddingOracle(768)
+	ciphertext := encrypt(msg)
+	if !isPaddingValid(ciphertext) {
+		t.Fatalf("padding not valid")
+	}
+
+	plaintext := breakRSAPaddingOracle(pub, ciphertext, isPaddingValid)
+
+	if !bytes.Equal(plaintext, msg) {
+		t.Errorf("expected plaintext: %v, got: %v", msg, plaintext)
+	}
+}
+
 func decToBig(t *testing.T, s string) *big.Int {
 	t.Helper()
 	b, ok := new(big.Int).SetString(s, 10)
