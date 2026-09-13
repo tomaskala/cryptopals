@@ -9,3 +9,4 @@ I also published writeups where I discuss the solutions and some lessons learned
 3. [Set 3](https://tomaskala.com/posts/cryptopals-set-3/)
 4. [Set 4](https://tomaskala.com/posts/cryptopals-set-4/)
 5. [Set 5](https://tomaskala.com/posts/cryptopals-set-5/)
+6. [Set 6](https://tomaskala.com/posts/cryptopals-set-6/)
