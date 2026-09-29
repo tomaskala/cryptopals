@@ -244,3 +244,24 @@ func breakCBCMACRepeatedOracle(captured []byte, attackerID string, client func([
 	tamperedMsg = append(tamperedMsg, extension[aesBlockSize:]...)
 	return tamperedMsg
 }
+
+func forgeCBCMACJSSnippet(iv, msg, mac []byte, block cipher.Block) []byte {
+	var msgWithComment []byte
+	msgWithComment = append(msgWithComment, msg...)
+	msgWithComment = append(msgWithComment, []byte("/*")...)
+	c := createCBCMAC(iv, msgWithComment, block)
+
+	p4 := []byte("**************/") // One less bytes than aesBlockSize.
+	buf := make([]byte, aesBlockSize)
+
+	block.Decrypt(buf, mac)
+	p3 := fixedXOR(padPKCS7(p4, aesBlockSize), buf)
+	block.Decrypt(buf, p3)
+	p3 = fixedXOR(c, buf)
+
+	var res []byte
+	res = append(res, padPKCS7(msgWithComment, aesBlockSize)...)
+	res = append(res, p3...)
+	res = append(res, p4...)
+	return res
+}

@@ -2,6 +2,7 @@ package cryptopals
 
 import (
 	"bytes"
+	"crypto/aes"
 	"strconv"
 	"strings"
 	"testing"
@@ -150,6 +151,34 @@ func TestChallenge49(t *testing.T) {
 			t.Errorf("expected amount %d, got %d", amount, foundAmount)
 		}
 	})
+}
+
+func TestChallenge50(t *testing.T) {
+	jsSnippet := []byte(`alert('MZA who was that?');
+`)
+	key := []byte("YELLOW SUBMARINE")
+	iv := make([]byte, aesBlockSize)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatalf("creating AES failed: %v", err)
+	}
+
+	expectedMAC := hexDecode(t, "296b8d7cb78a243dda4d0a61d33bbdd1")
+	if got := createCBCMAC(iv, jsSnippet, block); !bytes.Equal(got, expectedMAC) {
+		t.Fatalf("expected JS snippet to have MAC %v, got %v", expectedMAC, got)
+	}
+
+	forgedJSSnippet := []byte("alert('Ayo, the Wu is back!');")
+	forgedMsg := forgeCBCMACJSSnippet(iv, forgedJSSnippet, expectedMAC, block)
+
+	if got := createCBCMAC(iv, forgedMsg, block); !bytes.Equal(got, expectedMAC) {
+		t.Errorf("expected forged message to have MAC %v, got %v", expectedMAC, got)
+	}
+
+	if !bytes.HasPrefix(forgedMsg, forgedJSSnippet) {
+		t.Errorf("expected %s to be a prefix of %s", forgedJSSnippet, forgedMsg)
+	}
 }
 
 func transactionsEqual(t *testing.T, tx1, tx2 transaction) bool {
