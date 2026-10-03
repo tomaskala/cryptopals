@@ -2,12 +2,15 @@ package cryptopals
 
 import (
 	"bytes"
+	"compress/zlib"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"math"
+	mathrand "math/rand/v2"
 	"net/url"
 	"strconv"
 	"strings"
@@ -264,4 +267,134 @@ func forgeCBCMACJSSnippet(iv, msg, mac []byte, block cipher.Block) []byte {
 	res = append(res, p3...)
 	res = append(res, p4...)
 	return res
+}
+
+func newCompressionOracle(cookie []byte) (
+	streamCipherOracle func([]byte) []byte,
+	blockCipherOracle func([]byte) []byte,
+) {
+	header := `POST / HTTP/1.1
+Host: hapless.com
+Cookie: sessionid=%s
+Content-Length: %d
+
+%s
+`
+	preparePlaintext := func(payload []byte) []byte {
+		request := fmt.Sprintf(header, cookie, len(payload), payload)
+
+		var buf bytes.Buffer
+		w := zlib.NewWriter(&buf)
+		w.Write([]byte(request))
+		w.Close()
+
+		return buf.Bytes()
+	}
+
+	streamCipherOracle = func(payload []byte) []byte {
+		plaintext := preparePlaintext(payload)
+
+		key := make([]byte, aesBlockSize)
+		rand.Read(key)
+
+		iv := make([]byte, aesBlockSize)
+		rand.Read(iv)
+
+		ciphertext := make([]byte, aesBlockSize+len(plaintext))
+		copy(ciphertext, iv)
+
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			panic(err)
+		}
+		ctr := cipher.NewCTR(block, iv)
+		ctr.XORKeyStream(ciphertext[aesBlockSize:], plaintext)
+
+		return ciphertext
+	}
+	blockCipherOracle = func(payload []byte) []byte {
+		plaintext := preparePlaintext(payload)
+
+		key := make([]byte, aesBlockSize)
+		rand.Read(key)
+
+		iv := make([]byte, aesBlockSize)
+		rand.Read(iv)
+
+		ciphertext := make([]byte, aesBlockSize+len(padPKCS7(plaintext, aesBlockSize)))
+		copy(ciphertext, iv)
+
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			panic(err)
+		}
+		cbc := cipher.NewCBCEncrypter(block, iv)
+		cbc.CryptBlocks(ciphertext[aesBlockSize:], padPKCS7(plaintext, aesBlockSize))
+
+		return ciphertext
+	}
+	return
+}
+
+func breakStreamCipherCompressionOracle(oracle func([]byte) []byte) []byte {
+	const anchor = "Cookie: sessionid="
+	cookie := []byte(anchor)
+
+	for cookie[len(cookie)-1] != '\n' {
+		cookie = append(cookie, '*')
+		var argMin byte
+		minLength := math.MaxInt
+
+		for b := range 256 {
+			cookie[len(cookie)-1] = byte(b)
+			request := oracle(cookie)
+
+			if len(request) < minLength {
+				argMin = byte(b)
+				minLength = len(request)
+			}
+		}
+
+		cookie[len(cookie)-1] = argMin
+	}
+
+	return cookie[len(anchor) : len(cookie)-1]
+}
+
+func breakBlockCipherCompressionOracle(oracle func([]byte) []byte) []byte {
+	const anchor = "Cookie: sessionid="
+	cookie := []byte(anchor)
+
+	for cookie[len(cookie)-1] != '\n' {
+		cookie = append(cookie, '*')
+		var padding []byte
+
+		for {
+			var argMin byte
+			minLength1, minLength2 := math.MaxInt, math.MaxInt
+
+			for b := range 256 {
+				cookie[len(cookie)-1] = byte(b)
+				buf := append([]byte{}, padding...)
+				buf = append(buf, cookie...)
+				request := oracle(buf)
+
+				if len(request) < minLength1 {
+					minLength2 = minLength1
+					minLength1 = len(request)
+					argMin = byte(b)
+				} else if len(request) < minLength2 {
+					minLength2 = len(request)
+				}
+			}
+
+			if minLength1 < minLength2 {
+				cookie[len(cookie)-1] = argMin
+				break
+			}
+			padding = append(padding, byte(mathrand.N(256)))
+		}
+	}
+
+	return cookie[len(anchor) : len(cookie)-1]
 }

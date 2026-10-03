@@ -181,6 +181,31 @@ func TestChallenge50(t *testing.T) {
 	}
 }
 
+func TestChallenge51(t *testing.T) {
+	secret := []byte("TmV2ZXIgcmV2ZWFsIHRoZSBXdS1UYW5nIFNlY3JldCE=")
+	streamCipherOracle, blockCipherOracle := newCompressionOracle(secret)
+
+	t.Run("stream cipher", func(t *testing.T) {
+		sessionID := breakStreamCipherCompressionOracle(streamCipherOracle)
+
+		if !bytes.Equal(sessionID, secret) {
+			t.Errorf("expected session ID %s, got %s", secret, sessionID)
+		}
+	})
+
+	t.Run("block cipher", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping in short mode")
+		}
+
+		sessionID := breakBlockCipherCompressionOracle(blockCipherOracle)
+
+		if !bytes.Equal(sessionID, secret) {
+			t.Errorf("expected session ID %s, got %s", secret, sessionID)
+		}
+	})
+}
+
 func transactionsEqual(t *testing.T, tx1, tx2 transaction) bool {
 	t.Helper()
 
